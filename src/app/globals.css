@@ -57,6 +57,11 @@
   --radius-hud: 14px;
   --radius-chip: 999px;
 
+  /* Motion: strong ease-out for UI, iOS-like curve for sheets. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
   --shadow-glow: 0 0 0 1px rgb(94 200 255 / 0.25), 0 0 24px -4px rgb(94 200 255 / 0.45);
   --shadow-glow-strong: 0 0 0 1px rgb(94 200 255 / 0.5), 0 0 42px -2px rgb(34 176 255 / 0.65);
   --shadow-panel: 0 1px 0 0 rgb(255 255 255 / 0.04) inset, 0 20px 40px -24px rgb(0 0 0 / 0.8);
@@ -122,7 +127,30 @@
     font-family: var(--font-sans);
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
+    -webkit-text-size-adjust: 100%;
     scroll-behavior: smooth;
+  }
+
+  /* Controls behave like native ones: no double-tap delay, no long-press text selection. */
+  button,
+  a,
+  [role="button"],
+  [role="tab"],
+  summary,
+  label[for] {
+    touch-action: manipulation;
+  }
+  button,
+  [role="button"],
+  [role="tab"] {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* Numbers that are compared line by line (money, hours) align in columns. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
   }
 
   body {
@@ -263,4 +291,58 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Legal documents: plain language, comfortable measure. */
+@layer components {
+  .legal h2 {
+    margin-top: 2.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 1.35rem;
+    font-weight: 600;
+    color: var(--color-ink);
+  }
+  .legal p {
+    margin-top: 0.75rem;
+    color: var(--color-ink-soft);
+    line-height: 1.7;
+  }
+  .legal .legal-list {
+    margin-top: 0.75rem;
+    display: grid;
+    gap: 0.5rem;
+    padding-left: 1.25rem;
+    list-style: disc;
+    color: var(--color-ink-soft);
+    line-height: 1.6;
+  }
+  .legal .legal-list li::marker {
+    color: var(--color-glow);
+  }
+  .legal a {
+    color: var(--color-glow);
+    text-underline-offset: 4px;
+  }
+  .legal a:hover {
+    text-decoration: underline;
+  }
+  .legal strong {
+    color: var(--color-ink);
+  }
+}
+
+/*
+ * Chart tokens (dataviz method). Categorical slots validated on the navy
+ * surfaces (#0d1d3a, #0a1730): lightness band, chroma, CVD ΔE ≥ 8.4, contrast ≥ 3:1.
+ * Status colors stay the app's (done/pending/blocked) and always ship with icon + label.
+ */
+:root {
+  --viz-1: #3987e5;
+  --viz-2: #d95926;
+  --viz-3: #199e70;
+  --viz-4: #c98500;
+  --viz-wash: rgb(57 135 229 / 0.12);
+  --viz-track: #1a3158;
+  --viz-grid: #1a2f55;
+  --viz-axis: #2b4c86;
 }

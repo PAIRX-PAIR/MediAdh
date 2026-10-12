@@ -1,7 +1,28 @@
 "use client";
 
-import type { RequestStatus, RequestType, SupplyRequest, Task, TaskPriority, TaskStatus } from "@/lib/domain/schema";
-import type { PublicInfo, SyncPayload } from "@/lib/domain/views";
+import type {
+  AttachmentKind,
+  ClaimKind,
+  Client,
+  ClientKind,
+  Difficulty,
+  IpcEntry,
+  Machine,
+  MachineState,
+  Order,
+  OrderStatus,
+  Process,
+  ProductionSettings,
+  Quote,
+  RequestStatus,
+  RequestType,
+  SupplyRequest,
+  Task,
+  TaskPriority,
+  TaskStatus,
+} from "@/lib/domain/schema";
+import type { AttachmentView, ClientView, OrderView, PublicInfo, QuoteView, SyncPayload } from "@/lib/domain/views";
+import type { Indicators } from "@/lib/server/services/indicators";
 
 export class ApiError extends Error {
   constructor(
@@ -91,7 +112,136 @@ export interface TaskUpdate {
   quantityDone?: number;
   checklist?: Array<{ id?: string; text: string; done: boolean }>;
   checklistToggle?: { id: string; done: boolean };
+  actualHours?: number | null;
 }
+
+export interface ClientInput {
+  kind: ClientKind;
+  name: string;
+  nit: string;
+  companyPhone: string;
+  personalPhone: string;
+  contactName: string;
+  email: string;
+  city: string;
+  address: string;
+  notes: string;
+  tier: number;
+}
+
+export interface MachineInput {
+  name: string;
+  process: Process;
+  description: string;
+  state: MachineState;
+  activeSince: string | null;
+  hoursPerDay: number;
+  hourlyRate: number;
+  positionId: string | null;
+}
+
+export interface WorkItemInput {
+  id?: string;
+  process: Process;
+  machineId: string | null;
+  positionId?: string | null;
+  description: string;
+  plannedHours: number;
+}
+
+export interface SupplyInput {
+  id?: string;
+  description: string;
+  supplier: string;
+  quantity: number;
+  unitCost: number;
+}
+
+export interface OrderInput {
+  clientId: string | null;
+  clientName: string | null;
+  title: string;
+  description: string;
+  difficulty: Difficulty;
+  quantity: number;
+  condition: string;
+  receivedAt?: string | null;
+  due: { date: string; time: string } | null;
+  workItems: WorkItemInput[];
+  supplies: SupplyInput[];
+  price: number | null;
+  notes: string;
+}
+
+export type OrderActionInput =
+  | { action: "status"; to: OrderStatus }
+  | { action: "deliver"; satisfaction: number | null; finalPrice: number | null }
+  | { action: "close" }
+  | { action: "invoice"; number: string | null }
+  | { action: "claim"; kind: ClaimKind; description: string }
+  | { action: "resolveClaim"; claimId: string; resolution: string }
+  | { action: "satisfaction"; value: number | null }
+  | { action: "cancel"; reason: string | null }
+  | { action: "reopen" };
+
+export interface HistoricalInput {
+  clientId: string | null;
+  clientName: string | null;
+  title: string;
+  description: string;
+  quantity: number;
+  receivedAt: string;
+  deliveredAt: string;
+  dueDate: string | null;
+  workItems: Array<{ process: Process; machineId: string | null; hours: number }>;
+  supplies: SupplyInput[];
+  price: number | null;
+  satisfaction: number | null;
+  invoiceNumber: string | null;
+  notes: string;
+}
+
+export interface QuoteInput {
+  clientId: string | null;
+  clientName: string | null;
+  title: string;
+  description: string;
+  quantity: number;
+  materials: Array<{ id?: string; description: string; quantity: number; unitCost: number }>;
+  labor: Array<{ id?: string; process: Process; description: string; hours: number; rate: number | null }>;
+  difficulty: Difficulty;
+  marginPct: number | null;
+  ivaPct: number | null;
+  validDays: number | null;
+  notes: string;
+}
+
+export type QuoteActionInput =
+  | { action: "send" | "reject" | "draft" | "duplicate" }
+  | { action: "approve"; due: { date: string; time: string } | null; condition: string; machines: Record<string, string | null> };
+
+/** Uploads one file as the raw request body (images should be compressed first). */
+export async function uploadFile(file: Blob, meta: { kind: AttachmentKind; orderId?: string | null; quoteId?: string | null; name: string }) {
+  const params = new URLSearchParams({ tipo: meta.kind, nombre: meta.name });
+  if (meta.orderId) params.set("orden", meta.orderId);
+  if (meta.quoteId) params.set("cotizacion", meta.quoteId);
+  let res: Response;
+  try {
+    res = await fetch(`/api/adjuntos?${params}`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": file.type, Accept: "application/json" },
+      body: file,
+    });
+  } catch {
+    throw new ApiError(0, "Sin conexión. Revisa tu internet e intenta de nuevo.", "network");
+  }
+  const body = (await res.json().catch(() => ({}))) as { attachment?: AttachmentView; error?: string; code?: string };
+  if (!res.ok || !body.attachment) throw new ApiError(res.status, body.error ?? "No se pudo subir el archivo.", body.code ?? "error");
+  return body.attachment;
+}
+
+export const attachmentUrl = (id: string, download = false) => `/api/adjuntos/${encodeURIComponent(id)}${download ? "?descargar=1" : ""}`;
 
 export interface ContractTermsInput {
   startDate: string;
@@ -214,5 +364,54 @@ export const api = {
       request<{ entries: Array<{ id: string; at: string; actorName: string | null; action: string; target: string | null; detail: string | null }> }>(
         "/api/admin/audit",
       ),
+    updateProduction: (production: Partial<Omit<ProductionSettings, "processRates">> & { processRates?: Partial<ProductionSettings["processRates"]> }) =>
+      request<{ ok: true }>("/api/admin/settings", { method: "PATCH", body: { production } }),
   },
+
+  clients: {
+    create: (input: ClientInput) => request<{ client: Client }>("/api/admin/clients", { method: "POST", body: input }),
+    get: (id: string) => request<{ client: Client; orders: OrderView[]; quotes: QuoteView[] }>(`/api/admin/clients/${encodeURIComponent(id)}`),
+    update: (id: string, patch: Partial<ClientInput> & { archived?: boolean }) =>
+      request<{ client: ClientView }>(`/api/admin/clients/${encodeURIComponent(id)}`, { method: "PATCH", body: patch }),
+  },
+
+  machines: {
+    create: (input: MachineInput) => request<{ machine: Machine }>("/api/admin/machines", { method: "POST", body: input }),
+    update: (id: string, patch: Partial<MachineInput> & { order?: number; stopReason?: string | null }) =>
+      request<{ machine: Machine }>(`/api/admin/machines/${encodeURIComponent(id)}`, { method: "PATCH", body: patch }),
+    remove: (id: string) => request<{ ok: true }>(`/api/admin/machines/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  },
+
+  orders: {
+    all: () => request<{ orders: OrderView[] }>("/api/admin/orders"),
+    get: (id: string) => request<{ order: Order }>(`/api/admin/orders/${encodeURIComponent(id)}`),
+    create: (input: OrderInput) => request<{ order: Order }>("/api/admin/orders", { method: "POST", body: input }),
+    update: (id: string, patch: Partial<OrderInput>) => request<{ order: Order }>(`/api/admin/orders/${encodeURIComponent(id)}`, { method: "PATCH", body: patch }),
+    action: (id: string, input: OrderActionInput) =>
+      request<{ order: Order }>(`/api/admin/orders/${encodeURIComponent(id)}/action`, { method: "POST", body: input }),
+    remove: (id: string) => request<{ ok: true }>(`/api/admin/orders/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    historical: (input: HistoricalInput) => request<{ order: Order }>("/api/admin/historico", { method: "POST", body: input }),
+  },
+
+  quotes: {
+    get: (id: string) => request<{ quote: Quote }>(`/api/admin/quotes/${encodeURIComponent(id)}`),
+    create: (input: QuoteInput) => request<{ quote: Quote }>("/api/admin/quotes", { method: "POST", body: input }),
+    update: (id: string, patch: Partial<QuoteInput>) => request<{ quote: Quote }>(`/api/admin/quotes/${encodeURIComponent(id)}`, { method: "PATCH", body: patch }),
+    action: (id: string, input: QuoteActionInput) =>
+      request<{ quote: Quote; order?: Order }>(`/api/admin/quotes/${encodeURIComponent(id)}/action`, { method: "POST", body: input }),
+    remove: (id: string) => request<{ ok: true }>(`/api/admin/quotes/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  },
+
+  ipc: {
+    save: (entries: Array<{ month: string; index: number }>, remove: string[] = []) =>
+      request<{ entries: IpcEntry[] }>("/api/admin/ipc", { method: "PUT", body: { entries, remove } }),
+  },
+
+  indicators: (months = 12) => request<Indicators>(`/api/admin/kpis?meses=${months}`),
+
+  attachments: {
+    remove: (id: string) => request<{ ok: true }>(`/api/adjuntos/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  },
+
+  exportUrl: (kind: "ordenes" | "clientes") => `/api/admin/export?tipo=${kind}`,
 };

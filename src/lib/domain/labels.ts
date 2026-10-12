@@ -1,5 +1,5 @@
 import type { ContractStatus } from "./contracts";
-import type { AttachmentKind, ClaimKind, ClientKind, Difficulty, MachineState, Process, QuoteStatus, RequestStatus, RequestType, TaskPriority, TaskStatus, UserStatus } from "./schema";
+import type { AttachmentKind, ClaimKind, ClientKind, Difficulty, MachineState, OrderStatus, Process, QuoteStatus, RequestStatus, RequestType, TaskPriority, TaskStatus, UserStatus } from "./schema";
 
 /** Plain-language labels shown in the UI (single place to adjust wording). */
 
@@ -119,3 +119,22 @@ export const ATTACHMENT_KIND_LABEL: Record<AttachmentKind, string> = {
   foto: "Foto",
   documento: "Documento",
 };
+
+/** Chip tone per work-order status (see Chip in components/ui). */
+export const ORDER_STATUS_TONE: Record<OrderStatus, "neutral" | "progress" | "done" | "glow" | "pending" | "blocked" | "vacant"> = {
+  recibida: "neutral",
+  en_proceso: "progress",
+  terminada: "done",
+  entregada: "glow",
+  cerrada: "neutral",
+  garantia: "blocked",
+  cancelada: "vacant",
+};
+
+export const MACHINE_STATE_TONE: Record<MachineState, "done" | "vacant" | "pending"> = {
+  activa: "done",
+  inactiva: "vacant",
+  mantenimiento: "pending",
+};
+
+export const WEEKDAY_LABEL: Record<number, string> = { 1: "Lun", 2: "Mar", 3: "Mié", 4: "Jue", 5: "Vie", 6: "Sáb", 7: "Dom" };

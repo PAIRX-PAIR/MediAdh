@@ -60,7 +60,7 @@ export function emptyCollection<T>(): Collection<T> {
 
 export function defaultSettings(now: string): Settings {
   return {
-    workshopName: process.env.NEXT_PUBLIC_TALLER_NAME?.trim() || "SMI Taller",
+    workshopName: process.env.NEXT_PUBLIC_TALLER_NAME?.trim() || "Procesos productivos S.M.I.",
     timezone: process.env.TALLER_TIMEZONE?.trim() || DEFAULT_TIMEZONE,
     registrationOpen: true,
     registrationCodeHash: null,

@@ -32,7 +32,7 @@ export async function seedDemo(raw: RawStore) {
   const now = new Date();
   const iso = now.toISOString();
   const settings = defaultSettings(iso);
-  settings.workshopName = "SMI Taller · Demo";
+  settings.workshopName = "Procesos productivos S.M.I. · Demo";
   const today = todayIn(settings.timezone, now);
   const [adminHash, workerHash] = await Promise.all([
     hashPassword(DEMO_CREDENTIALS.password),

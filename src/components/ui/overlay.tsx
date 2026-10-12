@@ -50,7 +50,7 @@ export function Modal({
         if (dismissible && e.target === ref.current) onClose();
       }}
       className={cn(
-        "m-0 max-h-none max-w-none bg-transparent p-0 text-ink backdrop:bg-abyss/75 backdrop:backdrop-blur-sm",
+        "m-0 max-h-none max-w-none overflow-visible bg-transparent p-0 text-ink backdrop:bg-abyss/75 backdrop:backdrop-blur-sm",
         "fixed inset-x-0 bottom-0 top-auto w-full sm:inset-0 sm:m-auto sm:h-fit",
         { sm: "sm:max-w-md", md: "sm:max-w-lg", lg: "sm:max-w-2xl", xl: "sm:max-w-4xl" }[size],
       )}

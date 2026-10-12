@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 const SESSION_COOKIES = ["__Host-smi_session", "smi_session"];
-const APP_PREFIXES = ["/panel", "/tareas", "/solicitudes", "/cierre", "/perfil", "/admin"];
+const APP_PREFIXES = ["/panel", "/tareas", "/solicitudes", "/cierre", "/perfil", "/admin", "/imprimir"];
 
 /**
  * Sets a per-request nonce-based Content Security Policy and does an

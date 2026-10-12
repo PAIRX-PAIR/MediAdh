@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import "./globals.css";
 
-const APP_NAME = process.env.NEXT_PUBLIC_TALLER_NAME?.trim() || "SMI Taller";
+const APP_NAME = process.env.NEXT_PUBLIC_TALLER_NAME?.trim() || "Procesos productivos S.M.I.";
 
 export const metadata: Metadata = {
   title: { default: `${APP_NAME} · Centro de mando del taller`, template: `%s · ${APP_NAME}` },
@@ -24,6 +24,8 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  // The Android keyboard shrinks the layout like iOS does, so bottom bars stay visible.
+  interactiveWidget: "resizes-content",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

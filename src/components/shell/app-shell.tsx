@@ -26,7 +26,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const nav = useMemo<NavItem[]>(() => {
     if (!data.me.isAdmin) return WORKER_NAV;
-    return data.me.positionId ? [...ADMIN_NAV.slice(0, -1), ...ADMIN_WORKER_EXTRAS, ADMIN_NAV[ADMIN_NAV.length - 1]!] : ADMIN_NAV;
+    return data.me.positionId ? [...ADMIN_NAV, ...ADMIN_WORKER_EXTRAS] : ADMIN_NAV;
   }, [data.me.isAdmin, data.me.positionId]);
 
   if (data.me.mustChangePassword || data.me.needsConsent) {
@@ -53,11 +53,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       )}
 
       <div className="mx-auto flex w-full max-w-7xl flex-1 gap-6 px-3 sm:px-5 lg:px-8">
-        <aside className="sticky top-[76px] hidden h-[calc(100dvh-96px)] w-60 shrink-0 flex-col gap-1 py-6 lg:flex" aria-label="Navegación principal">
-          {nav.map((item) => (
-            <NavLink key={item.href} item={item} active={isActive(item.href)} />
-          ))}
-          <div className="mt-auto">
+        <aside
+          className="sticky top-[76px] hidden h-[calc(100dvh-96px)] w-60 shrink-0 flex-col gap-1 overflow-y-auto overscroll-contain py-6 [scrollbar-width:thin] lg:flex"
+          aria-label="Navegación principal"
+        >
+          <GroupedNav nav={nav} isActive={isActive} />
+          <div className="mt-auto pt-4">
             <SignOutButton />
           </div>
         </aside>
@@ -252,13 +253,32 @@ function BottomLink({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
+function GroupedNav({ nav, isActive }: { nav: NavItem[]; isActive: (href: string) => boolean }) {
+  const groups: Array<[string | undefined, NavItem[]]> = [];
+  for (const item of nav) {
+    const last = groups[groups.length - 1];
+    if (last && last[0] === item.group) last[1].push(item);
+    else groups.push([item.group, [item]]);
+  }
+  return (
+    <>
+      {groups.map(([group, items], i) => (
+        <div key={group ?? i} className="flex flex-col gap-0.5">
+          {group && <p className={cn("hud-label px-3 pb-1 text-[0.65rem]", i > 0 && "pt-4")}>{group}</p>}
+          {items.map((item) => (
+            <NavLink key={item.href} item={item} active={isActive(item.href)} />
+          ))}
+        </div>
+      ))}
+    </>
+  );
+}
+
 function MobileMenu({ open, onClose, nav, isActive }: { open: boolean; onClose: () => void; nav: NavItem[]; isActive: (href: string) => boolean }) {
   return (
     <Modal open={open} onClose={onClose} title="Menú" size="sm">
       <div className="flex flex-col gap-1">
-        {nav.map((item) => (
-          <NavLink key={item.href} item={item} active={isActive(item.href)} />
-        ))}
+        <GroupedNav nav={nav} isActive={isActive} />
         <div className="mt-3 border-t border-line pt-3">
           <SignOutButton />
         </div>

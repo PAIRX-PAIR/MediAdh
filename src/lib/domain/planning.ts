@@ -73,6 +73,18 @@ export function dueInstant(order: Pick<Order, "due">, timezone: string): number 
   return order.due ? zonedInstant(order.due.date, order.due.time, timezone).getTime() : null;
 }
 
+/**
+ * Target used for scheduling: the agreed date, except for warranty rework of a
+ * job already delivered, which is due as soon as possible (the claim's time).
+ */
+export function scheduleTarget(order: Pick<Order, "due" | "status" | "deliveredAt" | "claims">, timezone: string): number | null {
+  if (order.status === "garantia" && order.deliveredAt) {
+    const open = order.claims.filter((c) => !c.resolvedAt).map((c) => Date.parse(c.at));
+    return open.length ? Math.min(...open) : Date.parse(order.deliveredAt);
+  }
+  return dueInstant(order, timezone);
+}
+
 export interface Job {
   orderId: string;
   folio: string;
@@ -100,7 +112,7 @@ export function jobsFromOrders(orders: Order[], timezone: string): Job[] {
         process: item.process,
         machineId: item.machineId,
         hours,
-        due: dueInstant(o, timezone),
+        due: scheduleTarget(o, timezone),
         difficulty: o.difficulty,
         receivedAt: Date.parse(o.intake.receivedAt),
       });
@@ -423,12 +435,13 @@ export function prioritize(input: PriorityInput, ctx: PlanContext, schedule?: Sc
       byMachine.set(key, (byMachine.get(key) ?? 0) + remainingHours(w));
     }
     const bottleneck = Math.max(0, ...byMachine.values());
-    const due = dueInstant(o, ctx.timezone);
+    // Warranty rework of a delivered job has no pending "due date": the client is already waiting.
+    const due = o.status === "garantia" && o.deliveredAt ? null : dueInstant(o, ctx.timezone);
     let hoursUntilDue: number | null = null;
     let cr: number | null = null;
 
     if (due === null) {
-      reasons.push({ label: "Sin fecha de entrega", points: 0 });
+      if (o.status !== "garantia") reasons.push({ label: "Sin fecha de entrega", points: 0 });
     } else if (due <= ctx.now) {
       const late = Math.max(1, Math.round((ctx.now - due) / HOUR));
       reasons.push({ label: late >= 24 ? `Vencida hace ${Math.round(late / 24)} día(s)` : `Vencida hace ${late} h`, points: 45 });
@@ -458,7 +471,7 @@ export function prioritize(input: PriorityInput, ctx: PlanContext, schedule?: Sc
     const waitDays = Math.max(0, Math.floor((ctx.now - Date.parse(o.intake.receivedAt)) / (24 * HOUR)));
     if (waitDays > 0) reasons.push({ label: `Lleva ${waitDays} día(s) en el taller`, points: Math.min(10, waitDays) });
 
-    if (o.status === "garantia") reasons.push({ label: "Garantía: el cliente ya está esperando", points: 10 });
+    if (o.status === "garantia") reasons.push({ label: "Garantía: el cliente ya está esperando", points: 30 });
 
     const blockedReasons: string[] = [];
     for (const w of o.workItems) {

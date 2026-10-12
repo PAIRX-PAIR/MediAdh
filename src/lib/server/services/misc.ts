@@ -128,6 +128,9 @@ export async function savePushSubscription(
   if (!isAllowedPushEndpoint(input.endpoint)) throw badRequest("Servicio de notificaciones no soportado.");
   const id = createHash("sha256").update(input.endpoint).digest("hex").slice(0, 32);
   await getDb().transact(["push"], "Registra dispositivo para avisos", ({ push }) => {
+    const existing = push.items.find((s) => s.id === id);
+    // Re-synced on every app start: unchanged subscriptions must not cost a commit.
+    if (existing && existing.userId === principal.user.id && existing.keys.p256dh === input.keys.p256dh && existing.keys.auth === input.keys.auth) return;
     // The same device may change hands: the newest login owns the subscription.
     push.items = push.items.filter((s) => s.id !== id);
     push.items.push({
