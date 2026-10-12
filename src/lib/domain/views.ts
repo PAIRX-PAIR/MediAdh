@@ -1,5 +1,12 @@
 import type { ContractStatus } from "./contracts";
 import type {
+  Attachment,
+  Client,
+  IpcEntry,
+  Machine,
+  Order,
+  ProductionSettings,
+  Quote,
   Announcement,
   Contract,
   DayClosure,
@@ -99,6 +106,7 @@ export interface SyncPayload {
   users?: UserView[];
   alerts: AlertView[];
   push: { configured: boolean; publicKey: string | null; devices: number };
+  production: ProductionPayload;
 }
 
 export interface PublicInfo {
@@ -112,3 +120,40 @@ export interface PublicInfo {
 }
 
 export type UserStatusLabel = Record<UserStatus, string>;
+
+/* ─────────────────────────── Producción ─────────────────────────── */
+
+/** Entities travel without their change log; it is fetched on demand per entity. */
+export type OrderView = Omit<Order, "history">;
+export type QuoteView = Omit<Quote, "history">;
+export type ClientView = Omit<Client, "history">;
+export type MachineView = Machine;
+
+/** What a worker needs to know about the order behind one of their tasks. */
+export interface OrderBrief {
+  id: string;
+  folio: string;
+  title: string;
+  status: Order["status"];
+  difficulty: Order["difficulty"];
+  due: Order["due"];
+  quantity: number;
+  drawingIds: string[];
+  photoIds: string[];
+}
+
+export type AttachmentView = Omit<Attachment, "path" | "ref">;
+
+export interface ProductionPayload {
+  calendar: Pick<ProductionSettings, "workdays" | "saturdayHours" | "skipHolidays">;
+  machines: MachineView[];
+  /** Admin: full settings (rates, margins…). */
+  settings?: ProductionSettings;
+  orders?: OrderView[];
+  quotes?: QuoteView[];
+  clients?: ClientView[];
+  ipc?: IpcEntry[];
+  /** Worker: orders behind their tasks. */
+  briefs?: OrderBrief[];
+  attachments: AttachmentView[];
+}

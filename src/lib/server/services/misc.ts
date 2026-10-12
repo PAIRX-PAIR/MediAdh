@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import type { Announcement, LegalInfo, Notification } from "@/lib/domain/schema";
+import type { Announcement, LegalInfo, Notification, ProductionSettings } from "@/lib/domain/schema";
 import { isValidTimeZone, isRealDate } from "@/lib/domain/time";
 import { hashPassword } from "../auth/password";
 import type { Principal } from "../auth/principal";
@@ -68,6 +68,8 @@ export interface SettingsPatch {
   legal?: Partial<Omit<LegalInfo, "policyVersion">>;
   /** Publishes a new version of the legal texts: everyone re-accepts on next use. */
   publishPolicyVersion?: string;
+  /** Calendar, tariffs and commercial defaults of the production module. */
+  production?: Partial<Omit<ProductionSettings, "processRates">> & { processRates?: Partial<ProductionSettings["processRates"]> };
 }
 
 export async function updateSettings(principal: Principal, patch: SettingsPatch) {
@@ -90,6 +92,11 @@ export async function updateSettings(principal: Principal, patch: SettingsPatch)
     if (patch.maxPendingRegistrations !== undefined) settings.maxPendingRegistrations = patch.maxPendingRegistrations;
     if (patch.legal) settings.legal = { ...settings.legal, ...patch.legal };
     if (patch.publishPolicyVersion !== undefined) settings.legal.policyVersion = patch.publishPolicyVersion;
+    if (patch.production) {
+      const { processRates, ...rest } = patch.production;
+      settings.production = { ...settings.production, ...rest, processRates: { ...settings.production.processRates, ...processRates } };
+      if (settings.production.workdays.length === 0) throw badRequest("Debe haber al menos un día laboral.");
+    }
     settings.updatedAt = nowIso();
     const changed = Object.keys(patch).filter((k) => k !== "registrationCode");
     audit(log, actorOf(principal), "configuracion_actualizada", null, [...changed, ...(codeHash !== undefined ? ["codigo_registro"] : [])].join(", "));
@@ -147,14 +154,10 @@ export async function removePushSubscription(principal: Principal, endpoint: str
 
 /** Habeas data (Ley 1581 art. 8): the person can obtain every record about them. */
 export async function exportMyData(principal: Principal) {
-  const { users, positions, tasks, requests, closures, push, audit: log } = await getDb().read([
-    "users",
-    "positions",
-    "tasks",
-    "requests",
-    "closures",
-    "push",
-    "audit",
+  const db = getDb();
+  const [{ users, positions, tasks, requests, closures, push }, log] = await Promise.all([
+    db.read(["users", "positions", "tasks", "requests", "closures", "push"]),
+    db.readLog("audit"),
   ]);
   const me = users.items.find((u) => u.id === principal.user.id);
   if (!me) throw notFound();

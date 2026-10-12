@@ -4,7 +4,8 @@ import { defaultPositions, defaultSettings } from "@/lib/domain/defaults";
 import type { Collection, Database, Notification, Position, Task, User } from "@/lib/domain/schema";
 import { addDays, todayIn } from "@/lib/domain/time";
 import { hashPassword } from "../auth/password";
-import { docPath } from "../store/db";
+import { docPath, filesFor } from "../store/db";
+import { demoProduction } from "./demo-production";
 import type { RawStore } from "../store/raw";
 
 /** Public on purpose: the demo runs on throwaway in-memory data only. */
@@ -111,7 +112,7 @@ export async function seedDemo(raw: RawStore) {
     seq += 1;
     return {
       id: randomUUID(),
-      folio: `OT-${String(seq).padStart(4, "0")}`,
+      folio: `T-${String(seq).padStart(4, "0")}`,
       title,
       description: "",
       positionId,
@@ -131,25 +132,24 @@ export async function seedDemo(raw: RawStore) {
       startedAt: null,
       completedAt: null,
       completedBy: null,
+      orderId: null,
+      workItemId: null,
+      machineId: null,
+      plannedHours: null,
+      actualHours: null,
+      history: [],
       ...over,
     };
   };
   const step = (text: string, done = false) => ({ id: randomUUID(), text, done });
+  // Internal tasks (not tied to a client order); order steps are generated below.
   const tasks: Task[] = [
-    task("tornero-1", "Tornear ejes de transmisión Ø40 mm", {
-      priority: "alta",
-      status: "en_proceso",
-      piece: "Eje SAE 1045",
-      quantity: 24,
-      quantityDone: 9,
-      startedAt: iso,
-      dueDate: today,
-      checklist: [step("Verificar plano rev. C", true), step("Desbaste", true), step("Acabado y tolerancias"), step("Control dimensional")],
-      description: "Tolerancia h7 en el asiento de rodamiento. Usar inserto CNMG.",
+    task("tornero-1", "Roscar bujes M24 para stock", {
+      piece: "Buje bronce",
+      quantity: 12,
+      priority: "normal",
+      checklist: [step("Verificar plano rev. C", true), step("Desbaste"), step("Roscado"), step("Control dimensional")],
     }),
-    task("tornero-1", "Roscar bujes M24", { piece: "Buje bronce", quantity: 12, priority: "normal" }),
-    task("tornero-1", "Refrentar bridas para bomba", { priority: "urgente", dueDate: today, quantity: 4 }),
-    task("tornero-2", "Mecanizar poleas en V", { priority: "alta", quantity: 6 }),
     task("tornero-2", "Rectificar asientos de válvula", { status: "bloqueada", blockedReason: "Falta inserto CCMT 09" }),
     task("tornero-3", "Fabricar pasadores templados", { quantity: 50, quantityDone: 32, status: "en_proceso", startedAt: iso }),
     task("programador-cnc", "Programa CAM para carcasa de reductor", {
@@ -244,13 +244,16 @@ export async function seedDemo(raw: RawStore) {
   ];
 
   const collection = <T,>(items: T[], s = items.length): Collection<T> => ({ schema: 1, seq: s, items });
+  const taskDoc = collection(tasks, seq);
+  const notificationDoc = collection(notifications, 0);
+  const production = demoProduction({ today, now, adminId: admin.id, settings, tasks: taskDoc, notifications: notificationDoc });
   const db: Database = {
     settings,
     users: collection(users, 0),
     positions,
-    tasks: collection(tasks, seq),
+    tasks: taskDoc,
     requests: collection(requests),
-    notifications: collection(notifications, 0),
+    notifications: notificationDoc,
     announcements: collection(
       [
         {
@@ -268,9 +271,10 @@ export async function seedDemo(raw: RawStore) {
     closures: collection([], 0),
     push: collection([], 0),
     audit: collection([], 0),
+    ...production,
+    attachments: collection([], 0),
+    ipc: collection([], 0),
   };
 
-  const changes = new Map<string, string>();
-  for (const [name, value] of Object.entries(db)) changes.set(docPath(name as keyof Database), `${JSON.stringify(value, null, 2)}\n`);
-  await raw.write(snapshot.version, changes, "Datos de demostración");
+  await raw.write(snapshot.version, filesFor(db), "Datos de demostración");
 }

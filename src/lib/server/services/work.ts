@@ -15,7 +15,9 @@ import { addDays, dateInZone, isRealDate } from "@/lib/domain/time";
 import type { Principal } from "../auth/principal";
 import { badRequest, conflict, forbidden, notFound } from "../http";
 import { getDb } from "../store";
-import { actorOf, audit, folio, newId, nextSeq, nowIso, pushNotification } from "./common";
+import { actorOf, audit, folio, newId, nextSeq, nowIso, pushNotification, track } from "./common";
+import { applyTaskToOrder } from "./orders";
+import { diffFields } from "@/lib/domain/diff";
 
 const PRIORITY_LABEL: Record<TaskPriority, string> = { baja: "Baja", normal: "Normal", alta: "Alta", urgente: "URGENTE" };
 
@@ -53,7 +55,7 @@ export async function createTask(principal: Principal, input: TaskInput) {
     const now = nowIso();
     const task: Task = {
       id: newId(),
-      folio: folio("OT", nextSeq(docs.tasks)),
+      folio: folio("T", nextSeq(docs.tasks)),
       title: input.title,
       description: input.description,
       positionId: input.positionId,
@@ -73,6 +75,12 @@ export async function createTask(principal: Principal, input: TaskInput) {
       startedAt: null,
       completedAt: null,
       completedBy: null,
+      orderId: null,
+      workItemId: null,
+      machineId: null,
+      plannedHours: null,
+      actualHours: null,
+      history: [],
     };
     docs.tasks.items = pruneTasks(docs.tasks.items, principal.today);
     docs.tasks.items.push(task);
@@ -107,7 +115,24 @@ export interface TaskPatch {
   quantityDone?: number;
   checklist?: Array<{ id?: string; text: string; done: boolean }>;
   checklistToggle?: { id: string; done: boolean };
+  /** Hours actually spent, reported by the worker (feeds machine utilisation). */
+  actualHours?: number | null;
 }
+
+/** Fields owned by the work order: edit them on the OT, not on its generated task. */
+const ORDER_OWNED_FIELDS: Array<keyof TaskPatch> = ["title", "description", "dueDate", "piece", "quantity", "priority"];
+
+const TASK_LABELS = {
+  title: "Título",
+  description: "Descripción",
+  positionId: "Puesto",
+  priority: "Prioridad",
+  dueDate: "Fecha límite",
+  status: "Estado",
+  blockedReason: "Motivo de bloqueo",
+  quantityDone: "Piezas hechas",
+  actualHours: "Horas reales",
+} as const;
 
 const ADMIN_ONLY_FIELDS: Array<keyof TaskPatch> = [
   "title",
@@ -122,7 +147,7 @@ const ADMIN_ONLY_FIELDS: Array<keyof TaskPatch> = [
 
 export async function updateTask(principal: Principal, taskId: string, patch: TaskPatch) {
   if (patch.dueDate !== undefined) assertDue(patch.dueDate);
-  return getDb().transact(["tasks", "positions", "notifications", "audit"], "Actualiza una tarea", (docs) => {
+  return getDb().transact(["tasks", "positions", "orders", "notifications", "audit"], "Actualiza una tarea", (docs) => {
     const task = docs.tasks.items.find((t) => t.id === taskId);
     if (!task) throw notFound("Tarea no encontrada.");
     if (!canWorkOn(principal, task)) throw forbidden("Esta tarea no es de tu puesto.");
@@ -130,12 +155,18 @@ export async function updateTask(principal: Principal, taskId: string, patch: Ta
       throw forbidden("Solo un administrador puede editar los datos de la tarea.");
     }
 
+    if (task.orderId && ORDER_OWNED_FIELDS.some((f) => patch[f] !== undefined)) {
+      throw badRequest("Esta tarea viene de una orden de trabajo: cambia esos datos en la OT.", "order_owned");
+    }
+
     const actor = actorOf(principal);
     const now = nowIso();
     const notifications: Notification[] = [];
     const previousPosition = task.positionId;
     const previousStatus = task.status;
+    const before = structuredClone(task);
 
+    if (patch.actualHours !== undefined) task.actualHours = patch.actualHours;
     if (patch.positionId !== undefined && patch.positionId !== null && !docs.positions.items.some((p) => p.id === patch.positionId)) {
       throw badRequest("El puesto elegido no existe.");
     }
@@ -189,6 +220,9 @@ export async function updateTask(principal: Principal, taskId: string, patch: Ta
 
     task.updatedAt = now;
     task.updatedBy = principal.user.id;
+    const changes = diffFields(before, task, TASK_LABELS);
+    if (changes.length > 0) track(task, actor, "Actualizó la tarea", changes);
+    notifications.push(...applyTaskToOrder(docs, task, actor));
 
     // Who needs to know.
     const positionTitle = docs.positions.items.find((p) => p.id === task.positionId)?.title ?? "sin asignar";
@@ -252,6 +286,7 @@ export async function deleteTask(principal: Principal, taskId: string) {
   await getDb().transact(["tasks", "audit"], "Elimina una tarea", ({ tasks, audit: log }) => {
     const task = tasks.items.find((t) => t.id === taskId);
     if (!task) throw notFound("Tarea no encontrada.");
+    if (task.orderId) throw conflict("Esta tarea es un paso de una orden de trabajo. Quítalo desde la OT.", "order_owned");
     tasks.items = tasks.items.filter((t) => t.id !== taskId);
     audit(log, actorOf(principal), "tarea_eliminada", task.folio, task.title);
   });
@@ -404,9 +439,11 @@ export async function closeDay(
   const position = principal.position;
   if (!position) throw badRequest("El cierre de día es para cuentas con puesto en el taller.");
 
-  return getDb().transact(["tasks", "closures", "notifications", "audit"], "Cierre de día", (docs) => {
+  return getDb().transact(["tasks", "orders", "closures", "notifications", "audit"], "Cierre de día", (docs) => {
     const now = nowIso();
     const date = principal.today;
+    const extra: Notification[] = [];
+    const actor = actorOf(principal);
     for (const id of input.completeTaskIds) {
       const task = docs.tasks.items.find((t) => t.id === id);
       if (!task || task.positionId !== position.id) throw badRequest("Una de las tareas no es de tu puesto.");
@@ -418,6 +455,8 @@ export async function closeDay(
         task.updatedAt = now;
         task.updatedBy = principal.user.id;
         if (task.quantity !== null) task.quantityDone = task.quantity;
+        track(task, actor, "Completada en el cierre de día");
+        extra.push(...applyTaskToOrder(docs, task, actor));
       }
     }
     const mine = docs.tasks.items.filter((t) => t.positionId === position.id);
@@ -460,6 +499,6 @@ export async function closeDay(
       urgent: Boolean(input.issues),
     });
     audit(docs.audit, actorOf(principal), "cierre_de_dia", position.id, `${completed.length}/${pending.length}`);
-    return { closure, notifications: [notification] };
+    return { closure, notifications: [notification, ...extra] };
   });
 }

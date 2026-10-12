@@ -1,5 +1,5 @@
 import { gitBlobSha } from "./hash";
-import { ConflictError, StoreUnavailableError, type RawEntry, type RawSnapshot, type RawStore } from "./raw";
+import { ConflictError, inPrefix, StoreUnavailableError, type RawEntry, type RawReadOptions, type RawSnapshot, type RawStore } from "./raw";
 
 export interface GitHubStoreConfig {
   owner: string;
@@ -23,7 +23,8 @@ const HEAD_TTL_MS = 3000;
 const MIN_WRITE_SPACING_MS = 1000;
 const MAX_SUPERSEDED = 200;
 const REQUEST_TIMEOUT_MS = 12_000;
-const MAX_CACHED_BLOBS = 300;
+/** Monthly shards make the working set larger; blobs are immutable by sha. */
+const MAX_CACHED_BLOBS = 600;
 const MAX_CACHED_TREES = 20;
 
 interface HeadState {
@@ -194,7 +195,7 @@ export class GitHubRawStore implements RawStore {
     return text;
   }
 
-  async read(paths: string[], opts: { fresh?: boolean } = {}): Promise<RawSnapshot> {
+  async read(paths: string[], opts: RawReadOptions = {}): Promise<RawSnapshot> {
     const head = await this.getHead(Boolean(opts.fresh));
     const files = new Map<string, RawEntry | undefined>();
     if (head === null) {
@@ -202,8 +203,12 @@ export class GitHubRawStore implements RawStore {
       return { version: "empty", files };
     }
     const tree = await this.getTree(head);
+    const wanted = new Set(paths);
+    for (const prefix of opts.prefixes ?? []) {
+      for (const p of tree.blobs.keys()) if (inPrefix(p, prefix)) wanted.add(p);
+    }
     await Promise.all(
-      paths.map(async (p) => {
+      [...wanted].map(async (p) => {
         const sha = tree.blobs.get(p);
         files.set(p, sha ? { text: await this.getBlob(sha), sha } : undefined);
       }),

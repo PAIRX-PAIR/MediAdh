@@ -1,7 +1,7 @@
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { gitBlobSha } from "./hash";
-import { ConflictError, type RawSnapshot, type RawStore } from "./raw";
+import { ConflictError, inPrefix, type RawReadOptions, type RawSnapshot, type RawStore } from "./raw";
 
 /** Local JSON files for development (`.data/`). Single process only. */
 export class FileRawStore implements RawStore {
@@ -26,11 +26,22 @@ export class FileRawStore implements RawStore {
     }
   }
 
-  async read(paths: string[]): Promise<RawSnapshot> {
+  async read(paths: string[], opts: RawReadOptions = {}): Promise<RawSnapshot> {
     const version = await this.currentVersion();
     const files = new Map<string, { text: string; sha: string } | undefined>();
+    const wanted = new Set(paths);
+    for (const prefix of opts.prefixes ?? []) {
+      try {
+        for (const name of await readdir(this.resolve(prefix))) {
+          const p = `${prefix}${name}`;
+          if (inPrefix(p, prefix)) wanted.add(p);
+        }
+      } catch {
+        // Directory does not exist yet.
+      }
+    }
     await Promise.all(
-      paths.map(async (p) => {
+      [...wanted].map(async (p) => {
         try {
           const text = await readFile(this.resolve(p), "utf8");
           files.set(p, { text, sha: gitBlobSha(text) });

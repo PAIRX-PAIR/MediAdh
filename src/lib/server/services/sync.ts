@@ -1,9 +1,14 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { activeHolderId, contractStatus } from "@/lib/domain/contracts";
-import type { Position, Settings } from "@/lib/domain/schema";
+import type { Attachment, Database, Machine, Order, Position, Settings, Task } from "@/lib/domain/schema";
+import { isLate } from "@/lib/domain/lifecycle";
 import { addDays, daysBetween } from "@/lib/domain/time";
-import type { AlertView, PositionView, PublicInfo, SettingsView, SyncPayload, UserView } from "@/lib/domain/views";
+import type { AlertView, AttachmentView, OrderBrief, PositionView, ProductionPayload, PublicInfo, SettingsView, SyncPayload, UserView } from "@/lib/domain/views";
+
+/** Delivered orders stay in the live payload this long; older ones load from the archive. */
+const ORDER_WINDOW_DAYS = 120;
+const QUOTE_WINDOW_DAYS = 90;
 import type { Principal } from "../auth/principal";
 import { isDemoMode, vapidConfig } from "../env";
 import { getDb } from "../store";
@@ -34,6 +39,10 @@ export async function buildSync(principal: Principal): Promise<SyncPayload> {
     "announcements",
     "closures",
     "push",
+    "machines",
+    "orders",
+    "attachments",
+    ...(principal.isAdmin ? (["quotes", "clients", "ipc"] as const) : []),
   ]);
   const { today, isAdmin, user } = principal;
   const now = new Date();
@@ -72,11 +81,13 @@ export async function buildSync(principal: Principal): Promise<SyncPayload> {
 
   const myPositionId = principal.position?.id ?? null;
   const recentCutoff = addDays(today, isAdmin ? -30 : -7);
-  const tasks = docs.tasks.items.filter((t) => {
-    const visible = isAdmin || (myPositionId !== null && t.positionId === myPositionId);
-    if (!visible) return false;
-    return t.status !== "completada" || (t.completedAt ?? "").slice(0, 10) >= recentCutoff;
-  });
+  const tasks = docs.tasks.items
+    .filter((t) => {
+      const visible = isAdmin || (myPositionId !== null && t.positionId === myPositionId);
+      if (!visible) return false;
+      return t.status !== "completada" || (t.completedAt ?? "").slice(0, 10) >= recentCutoff;
+    })
+    .map((t) => ({ ...t, history: t.history.slice(-10) }));
 
   const requestCutoff = addDays(today, isAdmin ? -60 : -30);
   const requests = docs.requests.items.filter((r) => {
@@ -131,7 +142,13 @@ export async function buildSync(principal: Principal): Promise<SyncPayload> {
     }));
   }
 
-  const alerts = isAdmin ? buildAlerts(docs.positions.items, users ?? [], openTasksByPosition, docs.requests.items, today) : [];
+  const production = buildProduction(principal, docs, tasks);
+  const alerts = isAdmin
+    ? [
+        ...buildAlerts(docs.positions.items, users ?? [], openTasksByPosition, docs.requests.items, today),
+        ...productionAlerts(docs.orders.items, docs.machines.items, docs.settings.timezone, now.getTime()),
+      ]
+    : [];
 
   const vapid = vapidConfig();
   const position = principal.position;
@@ -166,6 +183,7 @@ export async function buildSync(principal: Principal): Promise<SyncPayload> {
     users,
     alerts,
     push: { configured: Boolean(vapid), publicKey: vapid?.publicKey ?? null, devices: devicesByUser.get(user.id) ?? 0 },
+    production,
   };
   // Content version (ignores the clock) so unchanged polls can be answered with 304.
   const { serverTime: _t, ...stable } = payload;
@@ -222,6 +240,119 @@ function buildAlerts(
       title: `${urgent} ${urgent === 1 ? "solicitud urgente" : "solicitudes urgentes"} sin atender`,
       body: "Material o herramienta que detiene el trabajo.",
       link: "/admin/solicitudes",
+    });
+  }
+  return alerts;
+}
+
+const strip = <T extends { history: unknown }>({ history: _h, ...rest }: T): Omit<T, "history"> => {
+  void _h;
+  return rest;
+};
+
+/** Live production data: admins get the working set, workers only what their tasks need. */
+function buildProduction(
+  principal: Principal,
+  docs: Pick<Database, "settings" | "orders" | "machines" | "attachments"> & Partial<Pick<Database, "quotes" | "clients" | "ipc">>,
+  tasks: Task[],
+): ProductionPayload {
+  const { workdays, saturdayHours, skipHolidays } = docs.settings.production;
+  const base = { calendar: { workdays, saturdayHours, skipHolidays }, machines: [...docs.machines.items].sort((a, b) => a.order - b.order) };
+  const viewOf = (a: Attachment): AttachmentView => {
+    const { path: _p, ref: _r, ...rest } = a;
+    void _p;
+    void _r;
+    return rest;
+  };
+
+  if (principal.isAdmin) {
+    const cutoff = addDays(principal.today, -ORDER_WINDOW_DAYS);
+    const orders = docs.orders.items
+      .filter(
+        (o) =>
+          !["entregada", "cerrada", "cancelada"].includes(o.status) ||
+          o.invoice.pending ||
+          (o.deliveredAt ?? o.updatedAt).slice(0, 10) >= cutoff,
+      )
+      .map(strip);
+    const quoteCutoff = addDays(principal.today, -QUOTE_WINDOW_DAYS);
+    const quotes = (docs.quotes?.items ?? [])
+      .filter((q) => q.status === "borrador" || q.status === "enviada" || (q.decidedAt ?? q.updatedAt).slice(0, 10) >= quoteCutoff)
+      .map(strip);
+    const visible = new Set([...orders.map((o) => o.id), ...quotes.map((q) => q.id)]);
+    return {
+      ...base,
+      settings: docs.settings.production,
+      orders,
+      quotes,
+      clients: (docs.clients?.items ?? []).map(strip),
+      ipc: docs.ipc?.items ?? [],
+      attachments: docs.attachments.items.filter((a) => (a.orderId && visible.has(a.orderId)) || (a.quoteId && visible.has(a.quoteId))).map(viewOf),
+    };
+  }
+
+  const orderIds = new Set(tasks.map((t) => t.orderId).filter((id): id is string => Boolean(id)));
+  const briefs: OrderBrief[] = docs.orders.items
+    .filter((o) => orderIds.has(o.id))
+    .map((o) => ({
+      id: o.id,
+      folio: o.folio,
+      title: o.title,
+      status: o.status,
+      difficulty: o.difficulty,
+      due: o.due,
+      quantity: o.intake.quantity,
+      drawingIds: o.drawingIds,
+      photoIds: [...o.intakePhotoIds, ...o.photoIds],
+    }));
+  return {
+    ...base,
+    briefs,
+    attachments: docs.attachments.items.filter((a) => a.orderId && orderIds.has(a.orderId)).map(viewOf),
+  };
+}
+
+function productionAlerts(orders: Order[], machines: Machine[], timezone: string, now: number): AlertView[] {
+  const alerts: AlertView[] = [];
+  const toInvoice = orders.filter((o) => o.invoice.pending);
+  if (toInvoice.length > 0) {
+    alerts.push({
+      id: "invoice",
+      level: "critical",
+      title: `FACTURAR: ${toInvoice.length} ${toInvoice.length === 1 ? "servicio cerrado" : "servicios cerrados"}`,
+      body: toInvoice.slice(0, 4).map((o) => `${o.folio} ${o.clientName}`).join(" · "),
+      link: "/admin/ordenes?vista=facturar",
+    });
+  }
+  const overdue = orders.filter((o) => ["recibida", "en_proceso", "terminada", "garantia"].includes(o.status) && isLate(o, timezone, now));
+  if (overdue.length > 0) {
+    alerts.push({
+      id: "overdue",
+      level: "critical",
+      title: `${overdue.length} ${overdue.length === 1 ? "orden vencida" : "órdenes vencidas"} sin entregar`,
+      body: overdue.slice(0, 4).map((o) => `${o.folio} · ${o.clientName}`).join(" · "),
+      link: "/admin/ordenes?vista=vencidas",
+    });
+  }
+  const claims = orders.filter((o) => o.status === "garantia");
+  if (claims.length > 0) {
+    alerts.push({
+      id: "claims",
+      level: "warning",
+      title: `${claims.length} ${claims.length === 1 ? "orden en garantía" : "órdenes en garantía"}`,
+      body: claims.slice(0, 4).map((o) => o.folio).join(" · "),
+      link: "/admin/ordenes?vista=garantia",
+    });
+  }
+  for (const m of machines) {
+    if (m.state !== "mantenimiento") continue;
+    const stop = m.stops.find((s) => !s.to);
+    alerts.push({
+      id: `machine-${m.id}`,
+      level: "warning",
+      title: `${m.name} en mantenimiento`,
+      body: stop?.reason ? `${stop.reason} · su capacidad no cuenta en la planeación.` : "Su capacidad no cuenta en la planeación.",
+      link: "/admin/cola",
     });
   }
   return alerts;

@@ -1,5 +1,5 @@
 import type { ContractStatus } from "./contracts";
-import type { RequestStatus, RequestType, TaskPriority, TaskStatus, UserStatus } from "./schema";
+import type { AttachmentKind, ClaimKind, ClientKind, Difficulty, MachineState, Process, QuoteStatus, RequestStatus, RequestType, TaskPriority, TaskStatus, UserStatus } from "./schema";
 
 /** Plain-language labels shown in the UI (single place to adjust wording). */
 
@@ -81,3 +81,41 @@ export function timeAgo(value: string, now = Date.now()) {
   if (Math.abs(hours) < 24) return rtf.format(-hours, "hour");
   return rtf.format(-Math.round(hours / 24), "day");
 }
+
+export const PROCESS_LABEL: Record<Process, string> = {
+  torno: "Torno",
+  fresadora: "Fresadora",
+  cnc: "CNC",
+  prensa: "Prensa",
+  soldadura: "Soldadura",
+  banco: "Mecánica de banco",
+};
+
+export const MACHINE_STATE_LABEL: Record<MachineState, string> = {
+  activa: "Activa",
+  inactiva: "Próximamente",
+  mantenimiento: "En mantenimiento",
+};
+
+export const CLIENT_KIND_LABEL: Record<ClientKind, string> = { empresa: "Empresa", persona: "Persona natural" };
+
+export const CLIENT_TIER_LABEL: Record<number, string> = { 1: "Normal", 2: "Frecuente", 3: "Estratégico" };
+
+export const DIFFICULTY_LABEL: Record<Difficulty, string> = { 1: "Normal", 2: "Complicado (+15 %)", 3: "Urgente (+25 %)" };
+
+export const QUOTE_STATUS_LABEL: Record<QuoteStatus | "vencida", string> = {
+  borrador: "Borrador",
+  enviada: "Enviada",
+  aprobada: "Aprobada",
+  rechazada: "Rechazada",
+  vencida: "Vencida",
+};
+
+export const CLAIM_KIND_LABEL: Record<ClaimKind, string> = { garantia: "Garantía", devolucion: "Devolución" };
+
+export const ATTACHMENT_KIND_LABEL: Record<AttachmentKind, string> = {
+  foto_ingreso: "Foto de llegada",
+  plano: "Plano / dibujo",
+  foto: "Foto",
+  documento: "Documento",
+};

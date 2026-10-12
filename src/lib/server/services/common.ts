@@ -1,11 +1,14 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { activeHolderId } from "@/lib/domain/contracts";
+import { recordChange } from "@/lib/domain/diff";
 import {
   RETENTION,
   type Audience,
   type AuditEntry,
+  type ChangeEntry,
   type Collection,
+  type FieldChange,
   type Notification,
   type NotificationType,
   type Position,
@@ -111,6 +114,16 @@ export function recipientsOf(audience: Audience, users: User[], positions: Posit
       return [...ids];
     }
   }
+}
+
+/** Appends a "Historial de cambios" entry to an entity (who, when, which fields). */
+export function track(
+  entity: { history: ChangeEntry[] },
+  actor: Actor,
+  action: string,
+  changes: FieldChange[] = [],
+) {
+  entity.history = recordChange(entity.history, { actorId: actor.id, actorName: actor.name, action, changes }, RETENTION.entityHistory);
 }
 
 export function normalizeUsername(value: string): string {

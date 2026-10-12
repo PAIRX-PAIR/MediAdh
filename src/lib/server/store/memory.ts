@@ -1,5 +1,5 @@
 import { gitBlobSha } from "./hash";
-import { ConflictError, type RawSnapshot, type RawStore } from "./raw";
+import { ConflictError, inPrefix, type RawReadOptions, type RawSnapshot, type RawStore } from "./raw";
 
 /** In-process store for tests and the public demo. State dies with the process. */
 export class MemoryRawStore implements RawStore {
@@ -7,9 +7,13 @@ export class MemoryRawStore implements RawStore {
   private files = new Map<string, string>();
   private version = 0;
 
-  async read(paths: string[]): Promise<RawSnapshot> {
+  async read(paths: string[], opts: RawReadOptions = {}): Promise<RawSnapshot> {
     const files = new Map<string, { text: string; sha: string } | undefined>();
-    for (const path of paths) {
+    const wanted = new Set(paths);
+    for (const prefix of opts.prefixes ?? []) {
+      for (const path of this.files.keys()) if (inPrefix(path, prefix)) wanted.add(path);
+    }
+    for (const path of wanted) {
       const text = this.files.get(path);
       files.set(path, text === undefined ? undefined : { text, sha: gitBlobSha(text) });
     }

@@ -28,6 +28,45 @@ export function addDays(date: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+const partsFormatters = new Map<string, Intl.DateTimeFormat>();
+
+/** Offset (ms) of `timeZone` from UTC at instant `at`. */
+function zoneOffset(at: number, timeZone: string): number {
+  let fmt = partsFormatters.get(timeZone);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    partsFormatters.set(timeZone, fmt);
+  }
+  const parts = fmt.formatToParts(new Date(at));
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  const asUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
+  return asUtc - Math.floor(at / 1000) * 1000;
+}
+
+/** The instant of wall-clock `date` (AAAA-MM-DD) at `time` (HH:mm) in `timeZone`. */
+export function zonedInstant(date: string, time: string, timeZone: string): Date {
+  const [h, m] = time.split(":").map(Number);
+  const wall = Date.UTC(+date.slice(0, 4), +date.slice(5, 7) - 1, +date.slice(8, 10), h ?? 0, m ?? 0);
+  let guess = wall - zoneOffset(wall, timeZone);
+  // A second pass settles DST transitions (Colombia has none, other zones may).
+  guess = wall - zoneOffset(guess, timeZone);
+  return new Date(guess);
+}
+
+/** HH:mm of `at` in `timeZone`. */
+export function timeInZone(at: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(at);
+}
+
 export function isValidTimeZone(timeZone: string): boolean {
   try {
     new Intl.DateTimeFormat("en-US", { timeZone }).format(new Date());

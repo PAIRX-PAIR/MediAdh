@@ -15,14 +15,29 @@ export interface RawSnapshot {
   files: Map<string, RawEntry | undefined>;
 }
 
+export interface RawReadOptions {
+  fresh?: boolean;
+  /**
+   * Also return every `.json` file directly inside these directories
+   * (e.g. "data/ordenes/"), from the same snapshot as `paths`.
+   */
+  prefixes?: string[];
+}
+
 export interface RawStore {
   readonly kind: "github" | "file" | "memory";
-  read(paths: string[], opts?: { fresh?: boolean }): Promise<RawSnapshot>;
+  read(paths: string[], opts?: RawReadOptions): Promise<RawSnapshot>;
   /**
    * Atomically apply `changes` (path -> new text, or null to delete) on top of
    * `baseVersion`. Throws ConflictError when the store moved past the base.
    */
   write(baseVersion: string, changes: Map<string, string | null>, message: string): Promise<string>;
+}
+
+/** True when `path` is a JSON file directly inside directory `prefix` (which ends with "/"). */
+export function inPrefix(path: string, prefix: string): boolean {
+  if (!path.startsWith(prefix) || !path.endsWith(".json")) return false;
+  return !path.slice(prefix.length).includes("/");
 }
 
 export class ConflictError extends Error {

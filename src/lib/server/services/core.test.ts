@@ -256,7 +256,7 @@ describe("tareas y permisos", () => {
       quantity: 10,
       checklist: ["Desbaste"],
     });
-    expect(task.folio).toBe("OT-0001");
+    expect(task.folio).toBe("T-0001");
     expect(notifications[0]).toMatchObject({ urgent: true, audience: { kind: "position", positionId: "tornero-1" } });
 
     await expect(work.updateTask(s1, task.id, { status: "en_proceso" })).rejects.toMatchObject({ status: 403 });

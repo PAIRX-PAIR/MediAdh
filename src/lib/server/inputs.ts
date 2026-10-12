@@ -4,21 +4,21 @@ import { AREAS } from "@/lib/domain/defaults";
 import { REQUEST_STATUSES, REQUEST_TYPES, TASK_PRIORITIES, TASK_STATUSES } from "@/lib/domain/schema";
 import { requiredText, text } from "./http";
 
-const optionalText = (max: number) =>
+export const optionalText = (max: number) =>
   z
     .union([text(max), z.null()])
     .optional()
     .transform((v) => (v ? v : null));
 
-const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida");
-const nullableDate = z.union([date, z.null(), z.literal("")]).transform((v) => (v ? v : null));
+export const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida");
+export const nullableDate = z.union([date, z.null(), z.literal("")]).transform((v) => (v ? v : null));
 const password = z.string().min(1, "Campo obligatorio").max(256);
 const username = z.string().min(1, "Campo obligatorio").max(64);
 const phone = z
   .union([z.string().max(30), z.null()])
   .optional()
   .transform((v) => (v ? v.replace(/[^\d+\s()-]/g, "").trim() || null : null));
-const entityId = z.string().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/, "Identificador inválido");
+export const entityId = z.string().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/, "Identificador inválido");
 
 export const loginInput = z.object({ username, password });
 
@@ -69,6 +69,7 @@ export const taskPatchInput = z
     quantityDone: z.number().int().min(0).max(100000),
     checklist: z.array(z.object({ id: z.string().max(64).optional(), text: requiredText(160), done: z.boolean() })).max(30),
     checklistToggle: z.object({ id: z.string().max(64), done: z.boolean() }),
+    actualHours: z.union([z.number().min(0).max(2000), z.null()]),
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, "Nada que actualizar");
@@ -193,6 +194,23 @@ const legalPatch = z
   })
   .partial();
 
+const money = z.number().min(0).max(100_000_000_000);
+
+const productionSettingsPatch = z
+  .object({
+    workdays: z.array(z.number().int().min(1).max(7)).max(7),
+    saturdayHours: z.union([z.number().min(0).max(24), z.null()]),
+    skipHolidays: z.boolean(),
+    processRates: z
+      .object({ torno: money, fresadora: money, cnc: money, prensa: money, soldadura: money, banco: money })
+      .partial(),
+    defaultMarginPct: z.number().min(0).max(500),
+    ivaPct: z.number().min(0).max(100),
+    quoteValidDays: z.number().int().min(1).max(365),
+    claimWindowDays: z.number().int().min(1).max(60),
+  })
+  .partial();
+
 export const settingsPatchInput = z
   .object({
     workshopName: requiredText(60),
@@ -202,5 +220,6 @@ export const settingsPatchInput = z
     maxPendingRegistrations: z.number().int().min(1).max(200),
     legal: legalPatch,
     publishPolicyVersion: date,
+    production: productionSettingsPatch,
   })
   .partial();
