@@ -1,0 +1,83 @@
+import type { ContractStatus } from "./contracts";
+import type { RequestStatus, RequestType, TaskPriority, TaskStatus, UserStatus } from "./schema";
+
+/** Plain-language labels shown in the UI (single place to adjust wording). */
+
+export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
+  pendiente: "Pendiente",
+  en_proceso: "En proceso",
+  bloqueada: "Bloqueada",
+  completada: "Completada",
+};
+
+export const TASK_PRIORITY_LABEL: Record<TaskPriority, string> = {
+  baja: "Baja",
+  normal: "Normal",
+  alta: "Alta",
+  urgente: "Urgente",
+};
+
+export const REQUEST_TYPE_LABEL: Record<RequestType, string> = {
+  material: "Material",
+  herramienta: "Herramienta",
+  mantenimiento: "Mantenimiento",
+  consumible: "Consumible",
+  epp: "EPP (protección)",
+  otro: "Otro",
+};
+
+export const REQUEST_STATUS_LABEL: Record<RequestStatus, string> = {
+  pendiente: "Pendiente",
+  en_camino: "En camino",
+  entregada: "Entregada",
+  rechazada: "Rechazada",
+  cancelada: "Cancelada",
+};
+
+export const CONTRACT_STATUS_LABEL: Record<ContractStatus, string> = {
+  vacante: "Vacante",
+  programado: "Inicia pronto",
+  vigente: "Vigente",
+  por_vencer: "Por vencer",
+  vencido: "Vencido · vacante",
+  terminado: "Terminado · vacante",
+};
+
+export const USER_STATUS_LABEL: Record<UserStatus, string> = {
+  pending: "Pendiente de aprobación",
+  active: "Activa",
+  rejected: "Rechazada",
+  disabled: "Desactivada",
+};
+
+/** Tailwind color token per status, used by chips, stripes and rings. */
+export const TASK_STATUS_TONE: Record<TaskStatus, "pending" | "progress" | "blocked" | "done"> = {
+  pendiente: "pending",
+  en_proceso: "progress",
+  bloqueada: "blocked",
+  completada: "done",
+};
+
+export const PRIORITY_RANK: Record<TaskPriority, number> = { urgente: 0, alta: 1, normal: 2, baja: 3 };
+
+export function formatDate(value: string | null | undefined, opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" }) {
+  if (!value) return "—";
+  const date = value.length === 10 ? new Date(`${value}T12:00:00`) : new Date(value);
+  return new Intl.DateTimeFormat("es-CO", opts).format(date);
+}
+
+export function formatDateTime(value: string | null | undefined) {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("es-CO", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }).format(new Date(value));
+}
+
+export function timeAgo(value: string, now = Date.now()) {
+  const seconds = Math.round((now - new Date(value).getTime()) / 1000);
+  const rtf = new Intl.RelativeTimeFormat("es", { numeric: "auto" });
+  if (Math.abs(seconds) < 60) return "justo ahora";
+  const minutes = Math.round(seconds / 60);
+  if (Math.abs(minutes) < 60) return rtf.format(-minutes, "minute");
+  const hours = Math.round(minutes / 60);
+  if (Math.abs(hours) < 24) return rtf.format(-hours, "hour");
+  return rtf.format(-Math.round(hours / 24), "day");
+}

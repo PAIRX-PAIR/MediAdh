@@ -1,0 +1,28 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# local data backend and secrets
+.data/
+.env
+.env*.local
+!.env.example
+
+# tests
+playwright-report/
+test-results/
+coverage/
+
+# research workspace
+research_notes/
+reports/
+
+# misc
+.DS_Store
+.vercel
+npm-debug.log*

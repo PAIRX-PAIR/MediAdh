@@ -1,0 +1,218 @@
+"use client";
+
+import type { RequestStatus, RequestType, SupplyRequest, Task, TaskPriority, TaskStatus } from "@/lib/domain/schema";
+import type { PublicInfo, SyncPayload } from "@/lib/domain/views";
+
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly code: string,
+    readonly retryAfterSeconds: number | null = null,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+export const UNAUTHORIZED_EVENT = "smi:unauthorized";
+
+type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
+
+export async function request<T>(path: string, init: { method?: Method; body?: unknown; signal?: AbortSignal } = {}): Promise<T> {
+  const method = init.method ?? "GET";
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method,
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+        ...(init.body !== undefined ? { "Content-Type": "application/json" } : {}),
+      },
+      body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+      signal: init.signal,
+    });
+  } catch (error) {
+    if ((error as Error).name === "AbortError") throw error;
+    throw new ApiError(0, "Sin conexión. Revisa tu internet e intenta de nuevo.", "network");
+  }
+
+  if (res.ok) {
+    if (res.status === 204) return undefined as T;
+    return (await res.json()) as T;
+  }
+
+  let message = "Ocurrió un error. Intenta de nuevo.";
+  let code = "error";
+  try {
+    const body = (await res.json()) as { error?: string; code?: string };
+    message = body.error ?? message;
+    code = body.code ?? code;
+  } catch {
+    // non-JSON error body
+  }
+  if (res.status === 401 && typeof window !== "undefined") window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+  const retry = Number(res.headers.get("retry-after"));
+  throw new ApiError(res.status, message, code, Number.isFinite(retry) && retry > 0 ? retry : null);
+}
+
+export type SessionInfo =
+  | { status: "anonymous" }
+  | { status: "denied"; reason: string; message: string }
+  | {
+      status: "ok";
+      incomplete: boolean;
+      user: { id: string; displayName: string; username: string; isAdmin: boolean; positionTitle: string | null };
+    };
+
+export interface TaskCreate {
+  title: string;
+  description?: string;
+  positionId: string | null;
+  priority?: TaskPriority;
+  dueDate?: string | null;
+  piece?: string | null;
+  quantity?: number | null;
+  checklist?: string[];
+}
+
+export interface TaskUpdate {
+  title?: string;
+  description?: string;
+  positionId?: string | null;
+  priority?: TaskPriority;
+  dueDate?: string | null;
+  piece?: string | null;
+  quantity?: number | null;
+  status?: TaskStatus;
+  blockedReason?: string | null;
+  quantityDone?: number;
+  checklist?: Array<{ id?: string; text: string; done: boolean }>;
+  checklistToggle?: { id: string; done: boolean };
+}
+
+export interface ContractTermsInput {
+  startDate: string;
+  endDate: string | null;
+  notes?: string | null;
+}
+
+/** Every endpoint the UI may call. Authorisation is enforced server-side. */
+export const api = {
+  publicInfo: () => request<PublicInfo>("/api/public"),
+  session: () => request<SessionInfo>("/api/session"),
+  sync: () => request<SyncPayload>("/api/sync"),
+
+  auth: {
+    login: (username: string, password: string) =>
+      request<{ ok: true; mustChangePassword: boolean }>("/api/auth/login", { method: "POST", body: { username, password } }),
+    logout: () => request<{ ok: true }>("/api/auth/logout", { method: "POST", body: {} }),
+    logoutEverywhere: () => request<{ ok: true }>("/api/auth/logout-all", { method: "POST", body: {} }),
+    register: (input: {
+      displayName: string;
+      username: string;
+      password: string;
+      phone?: string | null;
+      requestedPositionId?: string | null;
+      note?: string | null;
+      accessCode?: string | null;
+      consent: boolean;
+      website?: string | null;
+    }) => request<{ ok: true; message: string }>("/api/auth/register", { method: "POST", body: input }),
+    changePassword: (currentPassword: string, newPassword: string) =>
+      request<{ ok: true }>("/api/auth/password", { method: "POST", body: { currentPassword, newPassword } }),
+    acceptConsent: () => request<{ ok: true }>("/api/auth/consent", { method: "POST", body: {} }),
+    setup: (input: { setupKey: string; displayName: string; username: string; password: string }) =>
+      request<{ ok: true }>("/api/setup", { method: "POST", body: input }),
+  },
+
+  tasks: {
+    create: (input: TaskCreate) => request<{ task: Task }>("/api/tasks", { method: "POST", body: input }),
+    update: (id: string, patch: TaskUpdate) => request<{ task: Task }>(`/api/tasks/${encodeURIComponent(id)}`, { method: "PATCH", body: patch }),
+    remove: (id: string) => request<{ ok: true }>(`/api/tasks/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    addNote: (id: string, text: string) => request<{ task: Task }>(`/api/tasks/${encodeURIComponent(id)}/notes`, { method: "POST", body: { text } }),
+  },
+
+  requests: {
+    create: (input: { type: RequestType; item: string; quantity?: string | null; urgent?: boolean; note?: string | null; taskId?: string | null }) =>
+      request<{ request: SupplyRequest }>("/api/requests", { method: "POST", body: input }),
+    update: (id: string, status: RequestStatus, response?: string | null) =>
+      request<{ request: SupplyRequest }>(`/api/requests/${encodeURIComponent(id)}`, { method: "PATCH", body: { status, response: response ?? null } }),
+  },
+
+  closeDay: (input: { note?: string; issues?: string; completeTaskIds?: string[] }) =>
+    request<{ closure: unknown }>("/api/closures", { method: "POST", body: input }),
+
+  notifications: {
+    markRead: (ids: string[] | "all") => request<{ ok: true }>("/api/notifications/read", { method: "POST", body: { ids } }),
+  },
+
+  push: {
+    subscribe: (sub: { endpoint: string; keys: { p256dh: string; auth: string }; userAgent?: string | null }) =>
+      request<{ ok: true }>("/api/push/subscribe", { method: "POST", body: sub }),
+    unsubscribe: (endpoint: string) => request<{ ok: true }>("/api/push/unsubscribe", { method: "POST", body: { endpoint } }),
+    test: () => request<{ sent: number; failed: number }>("/api/push/test", { method: "POST", body: {} }),
+  },
+
+  me: {
+    exportUrl: "/api/me/export",
+  },
+
+  admin: {
+    createAccount: (input: {
+      displayName: string;
+      username: string;
+      tempPassword: string;
+      phone?: string | null;
+      kind: "admin" | "staff";
+      positionId?: string | null;
+      replaceCurrent?: boolean;
+      startDate?: string;
+      endDate?: string | null;
+      notes?: string | null;
+    }) => request<{ id: string }>("/api/admin/users", { method: "POST", body: input }),
+    updateUser: (id: string, patch: { displayName?: string; phone?: string | null; status?: "active" | "disabled"; unlock?: true }) =>
+      request<{ ok: true }>(`/api/admin/users/${encodeURIComponent(id)}`, { method: "PATCH", body: patch }),
+    deleteUser: (id: string) => request<{ ok: true }>(`/api/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    approve: (
+      id: string,
+      input: { mode: "staff" | "admin"; positionId?: string | null; replaceCurrent?: boolean; startDate?: string; endDate?: string | null; notes?: string | null },
+    ) => request<{ ok: true }>(`/api/admin/users/${encodeURIComponent(id)}/approve`, { method: "POST", body: input }),
+    reject: (id: string, reason?: string | null) =>
+      request<{ ok: true }>(`/api/admin/users/${encodeURIComponent(id)}/reject`, { method: "POST", body: { reason: reason ?? null } }),
+    resetPassword: (id: string, tempPassword: string) =>
+      request<{ ok: true }>(`/api/admin/users/${encodeURIComponent(id)}/reset-password`, { method: "POST", body: { tempPassword } }),
+
+    createPosition: (input: { title: string; area: string; grantsAdmin?: boolean }) =>
+      request<{ id: string }>("/api/admin/positions", { method: "POST", body: input }),
+    updatePosition: (id: string, patch: { title?: string; area?: string; grantsAdmin?: boolean; order?: number }) =>
+      request<{ ok: true }>(`/api/admin/positions/${encodeURIComponent(id)}`, { method: "PATCH", body: patch }),
+    deletePosition: (id: string) => request<{ ok: true }>(`/api/admin/positions/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    assignContract: (positionId: string, input: { userId: string; replaceCurrent?: boolean } & ContractTermsInput) =>
+      request<{ ok: true }>(`/api/admin/positions/${encodeURIComponent(positionId)}/contract`, { method: "PUT", body: input }),
+    updateContract: (positionId: string, input: ContractTermsInput) =>
+      request<{ ok: true }>(`/api/admin/positions/${encodeURIComponent(positionId)}/contract`, { method: "PATCH", body: input }),
+    endContract: (positionId: string, reason?: string | null) =>
+      request<{ ok: true }>(`/api/admin/positions/${encodeURIComponent(positionId)}/contract`, { method: "DELETE", body: { reason: reason ?? null } }),
+
+    createAnnouncement: (input: { text: string; level?: "info" | "importante"; expiresAt?: string | null }) =>
+      request<{ announcement: unknown }>("/api/admin/announcements", { method: "POST", body: input }),
+    deleteAnnouncement: (id: string) => request<{ ok: true }>(`/api/admin/announcements/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+    updateSettings: (patch: {
+      workshopName?: string;
+      timezone?: string;
+      registrationOpen?: boolean;
+      registrationCode?: string;
+      maxPendingRegistrations?: number;
+      legal?: Partial<Record<"companyName" | "tradeName" | "nit" | "address" | "city" | "email" | "phone" | "privacyContact" | "website", string>>;
+      publishPolicyVersion?: string;
+    }) => request<{ ok: true }>("/api/admin/settings", { method: "PATCH", body: patch }),
+    audit: () =>
+      request<{ entries: Array<{ id: string; at: string; actorName: string | null; action: string; target: string | null; detail: string | null }> }>(
+        "/api/admin/audit",
+      ),
+  },
+};
