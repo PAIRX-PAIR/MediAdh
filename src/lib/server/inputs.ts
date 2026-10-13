@@ -202,7 +202,7 @@ const productionSettingsPatch = z
     saturdayHours: z.union([z.number().min(0).max(24), z.null()]),
     skipHolidays: z.boolean(),
     processRates: z
-      .object({ torno: money, fresadora: money, cnc: money, prensa: money, soldadura: money, banco: money })
+      .object({ torno: money, fresadora: money, cepillo: money, cnc: money, prensa: money, soldadura: money, banco: money })
       .partial(),
     defaultMarginPct: z.number().min(0).max(500),
     ivaPct: z.number().min(0).max(100),

@@ -27,7 +27,7 @@ const STEPS = [
     station: "Engranajes",
     kicker: "02 · Cotización",
     title: "Cotiza con materiales, horas y dificultad",
-    body: "Torno, fresadora, CNC, prensa, soldadura y banco con su tarifa. Recargo por dificultad, utilidad e IVA. Si el cliente aprueba, se vuelve orden de trabajo.",
+    body: "Torno, fresadora, cepillo, CNC, prensa, soldadura y banco con su tarifa. Recargo por dificultad, utilidad e IVA. Si el cliente aprueba, se vuelve orden de trabajo.",
     icon: ClipboardCheck,
   },
   {

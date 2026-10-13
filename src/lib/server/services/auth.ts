@@ -22,12 +22,19 @@ function lockMinutes(failures: number): number {
   return LOCK_STEPS.find((s) => failures >= s.failures)?.minutes ?? 0;
 }
 
-/** Admin account declared in the environment: username + scrypt hash (never the password itself). */
-export function bootstrapAdminConfig(): { username: string; hash: string; name: string } | null {
-  const username = normalizeUsername(process.env.ADMIN_BOOTSTRAP_USERNAME ?? "");
-  const hash = process.env.ADMIN_BOOTSTRAP_PASSWORD_HASH?.trim() ?? "";
-  if (!username || !USERNAME_PATTERN.test(username) || !/^scrypt\$\d+\$\d+\$\d+\$[A-Za-z0-9+/=]+\$[A-Za-z0-9+/=]+$/.test(hash)) return null;
-  return { username, hash, name: process.env.ADMIN_BOOTSTRAP_NAME?.trim() || username };
+const BOOTSTRAP_SLOTS = ["ADMIN_BOOTSTRAP", "ADMIN_BOOTSTRAP_2", "ADMIN_BOOTSTRAP_3", "ADMIN_BOOTSTRAP_4", "ADMIN_BOOTSTRAP_5"];
+
+/**
+ * Admin accounts declared in the environment: username + scrypt hash (never the
+ * password itself). Slot 1 is ADMIN_BOOTSTRAP_*, the others ADMIN_BOOTSTRAP_2_* … _5_*.
+ */
+export function bootstrapAdminConfigs(): Array<{ username: string; hash: string; name: string }> {
+  return BOOTSTRAP_SLOTS.flatMap((prefix) => {
+    const username = normalizeUsername(process.env[`${prefix}_USERNAME`] ?? "");
+    const hash = process.env[`${prefix}_PASSWORD_HASH`]?.trim() ?? "";
+    if (!username || !USERNAME_PATTERN.test(username) || !/^scrypt\$\d+\$\d+\$\d+\$[A-Za-z0-9+/=]+\$[A-Za-z0-9+/=]+$/.test(hash)) return [];
+    return [{ username, hash, name: process.env[`${prefix}_NAME`]?.trim() || username }];
+  });
 }
 
 /**
@@ -37,8 +44,8 @@ export function bootstrapAdminConfig(): { username: string; hash: string; name: 
  * once the account exists (like SETUP_KEY).
  */
 export async function ensureBootstrapAdmin(username: string) {
-  const cfg = bootstrapAdminConfig();
-  if (!cfg || cfg.username !== username) return;
+  const cfg = bootstrapAdminConfigs().find((c) => c.username === username);
+  if (!cfg) return;
   const db = getDb();
   const { users, settings } = await db.read(["users", "settings"]);
   if (users.items.some((u) => u.username === cfg.username) || settings.bootstrapAdmins.includes(cfg.username)) return;
@@ -329,5 +336,5 @@ export async function setupFirstAdmin(
 
 export async function setupStatus() {
   const { users } = await getDb().read(["users"]);
-  return { needsSetup: !bootstrapAdminConfig() && !users.items.some((u) => u.kind === "admin"), setupEnabled: Boolean(process.env.SETUP_KEY) };
+  return { needsSetup: bootstrapAdminConfigs().length === 0 && !users.items.some((u) => u.kind === "admin"), setupEnabled: Boolean(process.env.SETUP_KEY) };
 }

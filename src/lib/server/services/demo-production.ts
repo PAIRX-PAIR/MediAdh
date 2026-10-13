@@ -43,11 +43,11 @@ export function demoProduction(ctx: DemoContext) {
   const at = (date: string, time = "09:00") => zonedInstant(date, time, tz).toISOString();
 
   // Example tariffs, only for the demo (the real app starts at $0 until the admin sets them).
-  settings.production.processRates = { torno: 55_000, fresadora: 65_000, cnc: 110_000, prensa: 45_000, soldadura: 60_000, banco: 40_000 };
+  settings.production.processRates = { torno: 55_000, fresadora: 65_000, cepillo: 50_000, cnc: 110_000, prensa: 45_000, soldadura: 60_000, banco: 40_000 };
   settings.production.defaultMarginPct = 30;
 
   const machines: Collection<Machine> = defaultMachines(iso);
-  const rates: Record<string, number> = { cnc: 95_000, torno: 48_000, fresadora: 55_000, prensa: 38_000, soldadura: 50_000, banco: 32_000 };
+  const rates: Record<string, number> = { cnc: 95_000, torno: 48_000, fresadora: 55_000, cepillo: 42_000, prensa: 38_000, soldadura: 50_000, banco: 32_000 };
   for (const m of machines.items) {
     m.hourlyRate = rates[m.process] ?? 0;
     if (m.state === "activa") m.activeSince = addDays(today, -400);

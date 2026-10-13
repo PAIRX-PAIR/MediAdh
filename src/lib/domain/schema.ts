@@ -270,7 +270,7 @@ export type AuditEntry = z.infer<typeof auditEntrySchema>;
 /* ───────────── Producción: máquinas, clientes, órdenes de trabajo, cotizaciones ───────────── */
 
 /** Processes quoted and scheduled by the workshop. Each machine belongs to one. */
-export const PROCESSES = ["torno", "fresadora", "cnc", "prensa", "soldadura", "banco"] as const;
+export const PROCESSES = ["torno", "fresadora", "cepillo", "cnc", "prensa", "soldadura", "banco"] as const;
 export type Process = (typeof PROCESSES)[number];
 
 export const MACHINE_STATES = ["activa", "inactiva", "mantenimiento"] as const;
@@ -550,12 +550,13 @@ export const productionSettingsSchema = z.object({
     .object({
       torno: z.number().min(0).default(0),
       fresadora: z.number().min(0).default(0),
+      cepillo: z.number().min(0).default(0),
       cnc: z.number().min(0).default(0),
       prensa: z.number().min(0).default(0),
       soldadura: z.number().min(0).default(0),
       banco: z.number().min(0).default(0),
     })
-    .default({ torno: 0, fresadora: 0, cnc: 0, prensa: 0, soldadura: 0, banco: 0 }),
+    .default({ torno: 0, fresadora: 0, cepillo: 0, cnc: 0, prensa: 0, soldadura: 0, banco: 0 }),
   defaultMarginPct: z.number().min(0).max(500).default(0),
   ivaPct: z.number().min(0).max(100).default(19),
   quoteValidDays: z.number().int().min(1).max(365).default(15),

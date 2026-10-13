@@ -27,9 +27,10 @@ export const DEFAULT_MACHINES: Array<Pick<Machine, "id" | "name" | "process" | "
   { id: "wkt", name: "WKT", process: "torno", description: "Torno convencional", state: "activa", order: 5, positionId: "tornero-2" },
   { id: "bouchi", name: "Bouchi", process: "torno", description: "Torno convencional", state: "activa", order: 6, positionId: "tornero-3" },
   { id: "fresadora", name: "Fresadora", process: "fresadora", description: "Fresadora universal", state: "activa", order: 7, positionId: "fresadora" },
-  { id: "prensa", name: "Prensa hidráulica", process: "prensa", description: "", state: "activa", order: 8, positionId: null },
-  { id: "soldadura", name: "Soldadura", process: "soldadura", description: "Estación de soldadura", state: "activa", order: 9, positionId: "soldador" },
-  { id: "banco", name: "Mecánica de banco", process: "banco", description: "Ajuste y ensamble", state: "activa", order: 10, positionId: null },
+  { id: "cepillo", name: "Cepillo", process: "cepillo", description: "", state: "activa", order: 8, positionId: null },
+  { id: "prensa", name: "Prensa hidráulica", process: "prensa", description: "", state: "activa", order: 9, positionId: null },
+  { id: "soldadura", name: "Soldadura", process: "soldadura", description: "Estación de soldadura", state: "activa", order: 10, positionId: "soldador" },
+  { id: "banco", name: "Mecánica de banco", process: "banco", description: "Ajuste y ensamble", state: "activa", order: 11, positionId: null },
 ];
 
 export const DEFAULT_HOURS_PER_DAY = 8;

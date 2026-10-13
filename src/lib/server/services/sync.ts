@@ -12,7 +12,7 @@ const QUOTE_WINDOW_DAYS = 90;
 import type { Principal } from "../auth/principal";
 import { isDemoMode, vapidConfig } from "../env";
 import { getDb } from "../store";
-import { bootstrapAdminConfig } from "./auth";
+import { bootstrapAdminConfigs } from "./auth";
 import { DEMO_CREDENTIALS } from "./demo";
 import { isVisibleTo } from "./visibility";
 
@@ -371,6 +371,6 @@ export async function buildPublicInfo(): Promise<PublicInfo> {
     positions: [...positions.items].sort((a, b) => a.order - b.order).map((p) => ({ id: p.id, title: p.title, area: p.area })),
     legal: settings.legal,
     demo: isDemoMode() ? DEMO_CREDENTIALS : null,
-    needsSetup: !bootstrapAdminConfig() && !users.items.some((u) => u.kind === "admin"),
+    needsSetup: bootstrapAdminConfigs().length === 0 && !users.items.some((u) => u.kind === "admin"),
   };
 }

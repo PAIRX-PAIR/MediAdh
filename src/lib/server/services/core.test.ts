@@ -110,10 +110,17 @@ describe("administrador declarado en el entorno", () => {
       // Other usernames are untouched.
       await expect(login({ username: "otro", password: "x" }, ip())).rejects.toMatchObject({ status: 401 });
       expect((await db.read(["users"])).users.items.some((u) => u.username === "otro")).toBe(false);
+      // Additional slots (ADMIN_BOOTSTRAP_2_*) work the same way.
+      process.env.ADMIN_BOOTSTRAP_2_USERNAME = "ax95";
+      process.env.ADMIN_BOOTSTRAP_2_PASSWORD_HASH = "scrypt$131072$8$1$c2FsdA==$a2V5";
+      await expect(login({ username: "ax95", password: "x" }, ip())).rejects.toMatchObject({ status: 401 });
+      expect((await db.read(["users"])).users.items.find((u) => u.username === "ax95")).toMatchObject({ kind: "admin", displayName: "ax95" });
     } finally {
       delete process.env.ADMIN_BOOTSTRAP_USERNAME;
       delete process.env.ADMIN_BOOTSTRAP_NAME;
       delete process.env.ADMIN_BOOTSTRAP_PASSWORD_HASH;
+      delete process.env.ADMIN_BOOTSTRAP_2_USERNAME;
+      delete process.env.ADMIN_BOOTSTRAP_2_PASSWORD_HASH;
     }
   });
 });

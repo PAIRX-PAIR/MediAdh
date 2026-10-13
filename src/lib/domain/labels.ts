@@ -85,6 +85,7 @@ export function timeAgo(value: string, now = Date.now()) {
 export const PROCESS_LABEL: Record<Process, string> = {
   torno: "Torno",
   fresadora: "Fresadora",
+  cepillo: "Cepillo",
   cnc: "CNC",
   prensa: "Prensa",
   soldadura: "Soldadura",
