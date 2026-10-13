@@ -45,7 +45,7 @@ Los nombres del equipo no van en el código (el repositorio es público): están
 npm run equipo:cargar
 ```
 
-Crea a cada persona en su puesto. Los operarios quedan sin acceso: ven su cola en el tablero (Cola → Tablero de operarios). Coordinación y asistencia (con el campo `usuario` en el archivo) reciben su contraseña temporal desde Equipo → «Restablecer contraseña».
+Crea a cada persona en su puesto. Los operarios quedan sin usuario: autorizan su celular con QR (Equipo → Accesos QR). Coordinación y asistencia (con el campo `usuario` en el archivo) reciben su contraseña temporal desde Equipo → «Restablecer contraseña».
 
 ## 6. Primer ingreso
 

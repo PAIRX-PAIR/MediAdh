@@ -91,3 +91,31 @@ test.describe("consola del coordinador", () => {
     }
   });
 });
+
+test("un operario pide acceso con QR y el coordinador lo autoriza", async ({ browser, page }) => {
+  // The operator's phone (no session).
+  const phoneContext = await browser.newContext();
+  const phone = await phoneContext.newPage();
+  await phone.goto("/");
+  await phone.getByRole("link", { name: "Soy operario" }).click();
+  await phone.getByRole("button", { name: "Pedir acceso" }).click();
+  const qr = phone.getByRole("img", { name: /Código QR para autorizar este celular/ });
+  await expect(qr).toBeVisible();
+  const code = ((await qr.getAttribute("alt")) ?? "").split(": ")[1]!.replace("-", "");
+  expect(code).toMatch(/^[A-Z2-9]{8}$/);
+
+  // The coordinator opens the link inside the QR and approves it.
+  await signIn(page, ADMIN);
+  await expect(page).toHaveURL(/\/admin$/);
+  await page.goto(`/admin/dispositivos?codigo=${code}`);
+  await expect(page.getByLabel("Código del celular")).toHaveValue(`${code.slice(0, 4)}-${code.slice(4)}`);
+  await page.getByLabel("¿Quién es el operario?").selectOption({ label: "Carlos Pérez (ficticio) · Tornero" });
+  await page.getByRole("button", { name: "Autorizar" }).click();
+  await expect(page.getByText("Con acceso").first()).toBeVisible();
+
+  // The phone moves on by itself to the operator's own queue.
+  await expect(phone.getByRole("heading", { level: 1, name: "Mi trabajo · Carlos Pérez (ficticio)" })).toBeVisible({ timeout: 15_000 });
+  await expect(phone.getByText("Pinacho").first()).toBeVisible();
+  await expect(phone.getByRole("heading", { name: /Diana Torres/ })).toHaveCount(0);
+  await phoneContext.close();
+});

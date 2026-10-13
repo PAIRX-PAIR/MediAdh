@@ -10,5 +10,5 @@ export const metadata: Metadata = {
 /** Operators' queue without signing in (secret link; read-only). */
 export default async function BoardPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  return <BoardScreen token={token} />;
+  return <BoardScreen source={`/api/tablero/${encodeURIComponent(token)}`} />;
 }

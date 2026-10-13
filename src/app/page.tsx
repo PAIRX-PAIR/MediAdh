@@ -1,4 +1,4 @@
-import { ArrowRight, BellRing, ClipboardCheck, Cog, FileText, Gauge, LogIn, ShieldCheck, Smartphone, UserPlus } from "lucide-react";
+import { ArrowRight, BellRing, ClipboardCheck, Cog, FileText, Gauge, LogIn, QrCode, ShieldCheck, Smartphone, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { AccessDialog } from "@/components/access/access-dialog";
@@ -43,7 +43,7 @@ const STEPS = [
     station: "Soldadura",
     kicker: "04 · Producción",
     title: "Cada operario, su trabajo en el celular",
-    body: "Las tareas llegan al puesto, no a la persona. Avisos con sonido, pedir material en tres toques y cierre del día. Si cambia el contrato, el puesto conserva su trabajo.",
+    body: "Cada operario autoriza su celular una sola vez con un código QR, sin usuario ni contraseña, y ve su cola en orden: qué sigue, cuántas horas y cuándo se entrega. Las tareas llegan al puesto, no a la persona.",
     icon: Smartphone,
   },
   {
@@ -115,6 +115,9 @@ export default async function Home() {
                   <Link href="/?acceso=1" scroll={false} className="inline-flex h-14 items-center gap-2.5 rounded-xl border border-glow/50 bg-gradient-to-b from-navy-400 to-navy-600 px-6 font-display text-lg font-semibold text-white shadow-glow transition-shadow hover:shadow-glow-strong">
                     <LogIn className="size-5" aria-hidden /> Iniciar sesión
                   </Link>
+                  <Link href="/operario" className="inline-flex h-14 items-center gap-2.5 rounded-xl border border-line-strong bg-abyss/60 px-6 font-display text-lg font-semibold text-ink backdrop-blur hover:border-glow/60">
+                    <QrCode className="size-5" aria-hidden /> Soy operario
+                  </Link>
                   {info.registrationOpen && (
                     <Link href="/?acceso=registro" scroll={false} className="inline-flex h-14 items-center gap-2.5 rounded-xl border border-line-strong bg-abyss/60 px-6 font-display text-lg font-semibold text-ink backdrop-blur hover:border-glow/60">
                       <UserPlus className="size-5" aria-hidden /> Crear cuenta
@@ -124,7 +127,7 @@ export default async function Home() {
               )}
             </div>
             {info.demo && (
-              <p className="mt-4 text-sm text-vacant">Demostración con datos ficticios: entra y prueba como coordinador o como tornero.</p>
+              <p className="mt-4 text-sm text-vacant">Demostración con datos ficticios: entra como coordinador o mira el tablero de operarios.</p>
             )}
           </div>
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-32 bg-gradient-to-b from-transparent to-abyss" aria-hidden />

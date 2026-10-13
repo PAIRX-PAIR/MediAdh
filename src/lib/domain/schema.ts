@@ -644,6 +644,29 @@ export const attendanceSchema = z.object({
 });
 export type Attendance = z.infer<typeof attendanceSchema>;
 
+/**
+ * Celular de un operario autorizado por QR: the phone asks for access (pending,
+ * with a short code shown as QR), an admin scans it and assigns the operator.
+ * Only a hash of the device secret is stored; the secret lives in an httpOnly cookie.
+ */
+export const DEVICE_STATUSES = ["pendiente", "aprobado", "revocado"] as const;
+export const deviceSchema = z.object({
+  id,
+  /** Short code shown on the phone and inside its QR (pending requests only). */
+  code: z.string(),
+  secretHash: z.string(),
+  status: z.enum(DEVICE_STATUSES),
+  userId: z.string().nullable().default(null),
+  /** Short description of the phone (from its browser). */
+  label: z.string().default(""),
+  createdAt: isoDateTime,
+  expiresAt: isoDateTime,
+  approvedBy: z.string().nullable().default(null),
+  approvedAt: isoDateTime.nullable().default(null),
+  revokedAt: isoDateTime.nullable().default(null),
+});
+export type Device = z.infer<typeof deviceSchema>;
+
 export const legalInfoSchema = z.object({
   /** Razón social del responsable del tratamiento. */
   companyName: z.string().default(""),
@@ -709,6 +732,7 @@ export const COLLECTIONS = {
   attachments: collectionSchema(attachmentSchema),
   ipc: collectionSchema(ipcEntrySchema),
   attendance: collectionSchema(attendanceSchema),
+  devices: collectionSchema(deviceSchema),
 } as const;
 
 export type CollectionName = keyof typeof COLLECTIONS;
@@ -731,6 +755,7 @@ export interface Database {
   attachments: Collection<Attachment>;
   ipc: Collection<IpcEntry>;
   attendance: Collection<Attendance>;
+  devices: Collection<Device>;
 }
 
 export type DocName = keyof Database;
@@ -766,6 +791,7 @@ export const DOC_LAYOUT: Record<DocName, DocLayout> = {
   attachments: { kind: "single" },
   ipc: { kind: "single" },
   attendance: { kind: "sharded", dir: "asistencia" },
+  devices: { kind: "single" },
 };
 
 export const DOC_NAMES = Object.keys(DOC_LAYOUT) as DocName[];

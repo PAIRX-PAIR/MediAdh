@@ -26,7 +26,13 @@ export function BoardLinkCard() {
         <h2 id="tablero-title" className="flex items-center gap-2 font-display font-semibold text-ink">
           <MonitorPlay className="size-5 text-glow" aria-hidden /> Tablero de operarios
         </h2>
-        <p className="text-sm text-muted">Los operarios ven su cola sin iniciar sesión. Solo lectura, sin clientes ni precios. Comparte el enlace solo con el equipo.</p>
+        <p className="text-sm text-muted">
+          Todas las colas en una pantalla del taller (televisor o tablet). Solo lectura, sin clientes ni precios. Para que cada operario vea solo la suya en su celular, usa{" "}
+          <a href="/admin/dispositivos" className="font-semibold text-glow hover:underline">
+            Accesos QR
+          </a>
+          .
+        </p>
       </div>
       <div className="flex flex-wrap gap-2">
         <a

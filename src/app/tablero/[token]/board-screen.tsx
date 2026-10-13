@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, Ban, Clock, Wrench } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { BrandMark } from "@/components/shell/brand-mark";
 import { Chip, Spinner, cn } from "@/components/ui/primitives";
 import { DIFFICULTY_LABEL, MACHINE_STATE_LABEL, PROCESS_LABEL, formatDate } from "@/lib/domain/labels";
@@ -14,8 +14,24 @@ function dueLabel(job: BoardJob) {
   return `${formatDate(job.due.date, { weekday: "short", day: "numeric", month: "short" })} · ${job.due.time}`;
 }
 
-/** The floor's view: each operator, their machines and the jobs in the order they should run. */
-export function BoardScreen({ token }: { token: string }) {
+/**
+ * The floor's view: each operator, their machines and the jobs in the order
+ * they should run. `source` is the shared board link or a phone's own queue.
+ */
+export function BoardScreen({
+  source,
+  title = "Tablero del taller",
+  missingMessage = "Este enlace del tablero no existe o fue cambiado. Pide el enlace nuevo al coordinador.",
+  onDenied,
+  actions,
+}: {
+  source: string;
+  title?: string;
+  missingMessage?: string;
+  /** The phone lost its access (403): let the parent show the QR again. */
+  onDenied?: () => void;
+  actions?: ReactNode;
+}) {
   const [board, setBoard] = useState<Board | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [operator, setOperator] = useState<string>("todos");
@@ -27,9 +43,13 @@ export function BoardScreen({ token }: { token: string }) {
   }, []);
 
   useEffect(() => {
-    fetch(`/api/tablero/${encodeURIComponent(token)}`, { cache: "no-store" })
+    fetch(source, { cache: "no-store" })
       .then(async (res) => {
-        if (res.status === 404) throw new Error("Este enlace del tablero no existe o fue cambiado. Pide el enlace nuevo al coordinador.");
+        if (res.status === 403 && onDenied) {
+          onDenied();
+          throw new Error("Este celular ya no tiene acceso.");
+        }
+        if (res.status === 404) throw new Error(missingMessage);
         if (!res.ok) throw new Error("No se pudo actualizar el tablero. Se reintenta en un minuto.");
         return (await res.json()) as Board;
       })
@@ -38,7 +58,7 @@ export function BoardScreen({ token }: { token: string }) {
         setError(null);
       })
       .catch((e: Error) => setError(e.message));
-  }, [token, tick]);
+  }, [source, tick, missingMessage, onDenied]);
 
   if (!board) {
     return (
@@ -56,28 +76,31 @@ export function BoardScreen({ token }: { token: string }) {
         <div className="flex min-w-0 items-center gap-3">
           <BrandMark className="size-10 shrink-0" />
           <div className="min-w-0">
-            <h1 className="truncate font-display text-xl font-bold text-ink sm:text-2xl">Tablero del taller</h1>
+            <h1 className="truncate font-display text-xl font-bold text-ink sm:text-2xl">{title}</h1>
             <p className="text-sm text-muted">
               {formatDate(board.today, { weekday: "long", day: "numeric", month: "long" })}
               {board.shiftsToday.length ? ` · turnos ${board.shiftsToday.map((s) => `${s.start}–${s.end}`).join(" y ")}` : " · hoy no se trabaja"}
             </p>
           </div>
         </div>
-        <label className="flex items-center gap-2 text-sm text-ink-soft">
-          Operario
-          <select
-            value={operator}
-            onChange={(e) => setOperator(e.target.value)}
-            className="h-11 rounded-xl border border-line bg-night/80 px-3 text-ink focus:border-glow focus:outline-none"
-          >
-            <option value="todos">Todos</option>
-            {board.groups.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.operator ?? g.title}
-              </option>
-            ))}
-          </select>
-        </label>
+        {actions}
+        {board.groups.length > 1 && (
+          <label className="flex items-center gap-2 text-sm text-ink-soft">
+            Operario
+            <select
+              value={operator}
+              onChange={(e) => setOperator(e.target.value)}
+              className="h-11 rounded-xl border border-line bg-night/80 px-3 text-ink focus:border-glow focus:outline-none"
+            >
+              <option value="todos">Todos</option>
+              {board.groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.operator ?? g.title}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </header>
       {error && (
         <p className="mx-auto mb-4 flex max-w-7xl items-center gap-2 rounded-xl border border-pending/40 bg-pending/10 p-3 text-sm text-pending">

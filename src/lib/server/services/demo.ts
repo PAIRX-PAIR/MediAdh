@@ -310,6 +310,7 @@ export async function seedDemo(raw: RawStore) {
     attachments: collection([], 0),
     ipc: collection([], 0),
     attendance: collection(attendance, 0),
+    devices: collection([], 0),
   };
 
   await raw.write(snapshot.version, filesFor(db), "Datos de demostración");
