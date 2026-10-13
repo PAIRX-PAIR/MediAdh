@@ -23,7 +23,13 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   projects: [
-    { name: "escritorio", use: { ...devices["Desktop Chrome"], ...(useSystemChrome ? { channel: "chrome" } : {}) }, testIgnore: /operario.spec.ts/ },
+    { name: "setup", use: { ...devices["Desktop Chrome"], ...(useSystemChrome ? { channel: "chrome" } : {}) }, testMatch: /auth.setup.ts/ },
+    {
+      name: "escritorio",
+      use: { ...devices["Desktop Chrome"], ...(useSystemChrome ? { channel: "chrome" } : {}) },
+      testIgnore: [/operario.spec.ts/, /auth.setup.ts/],
+      dependencies: ["setup"],
+    },
     {
       name: "celular",
       use: { ...devices["Pixel 7"], ...(useSystemChrome ? { channel: "chrome" } : {}) },

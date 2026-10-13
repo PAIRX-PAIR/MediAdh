@@ -2,6 +2,8 @@ import { expect, type Page } from "@playwright/test";
 
 export const ADMIN = { username: "admin.demo", password: "Demo-Taller-2026" };
 export const WORKER = { username: "tornero.demo", password: "Tornero-Demo-2026" };
+/** Saved session of ADMIN (written by auth.setup.ts). */
+export const ADMIN_STATE = "e2e/.auth/admin.json";
 
 /** Signs in through the real access popup (no API shortcut). */
 export async function signIn(page: Page, who: { username: string; password: string }) {

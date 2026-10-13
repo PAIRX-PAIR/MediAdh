@@ -1,9 +1,12 @@
 import { expect, test } from "@playwright/test";
-import { ADMIN, signIn, watchConsole } from "./helpers";
+import { ADMIN_STATE, watchConsole } from "./helpers";
+
+// One saved session for every test here (see auth.setup.ts).
+test.use({ storageState: ADMIN_STATE });
 
 test.describe("consola del coordinador", () => {
   test.beforeEach(async ({ page }) => {
-    await signIn(page, ADMIN);
+    await page.goto("/admin");
     await expect(page).toHaveURL(/\/admin$/);
   });
 
@@ -94,7 +97,7 @@ test.describe("consola del coordinador", () => {
 
 test("un operario pide acceso con QR y el coordinador lo autoriza", async ({ browser, page }) => {
   // The operator's phone (no session).
-  const phoneContext = await browser.newContext();
+  const phoneContext = await browser.newContext({ storageState: { cookies: [], origins: [] } });
   const phone = await phoneContext.newPage();
   await phone.goto("/");
   await phone.getByRole("link", { name: "Soy operario" }).click();
@@ -104,9 +107,7 @@ test("un operario pide acceso con QR y el coordinador lo autoriza", async ({ bro
   const code = ((await qr.getAttribute("alt")) ?? "").split(": ")[1]!.replace("-", "");
   expect(code).toMatch(/^[A-Z2-9]{8}$/);
 
-  // The coordinator opens the link inside the QR and approves it.
-  await signIn(page, ADMIN);
-  await expect(page).toHaveURL(/\/admin$/);
+  // The coordinator (saved session) opens the link inside the QR and approves it.
   await page.goto(`/admin/dispositivos?codigo=${code}`);
   await expect(page.getByLabel("Código del celular")).toHaveValue(`${code.slice(0, 4)}-${code.slice(4)}`);
   await page.getByLabel("¿Quién es el operario?").selectOption({ label: "Carlos Pérez (ficticio) · Tornero" });

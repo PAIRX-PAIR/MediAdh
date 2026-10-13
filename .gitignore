@@ -28,3 +28,6 @@ reports/
 .DS_Store
 .vercel
 npm-debug.log*
+
+# Playwright saved sessions
+e2e/.auth/

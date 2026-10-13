@@ -1,4 +1,4 @@
-import { ArrowRight, BellRing, ClipboardCheck, Cog, FileText, Gauge, LogIn, QrCode, ShieldCheck, Smartphone, UserPlus } from "lucide-react";
+import { ArrowRight, BellRing, Download, ClipboardCheck, Cog, FileText, Gauge, LogIn, QrCode, ShieldCheck, Smartphone, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { AccessDialog } from "@/components/access/access-dialog";
@@ -12,6 +12,8 @@ import { resolvePrincipal } from "@/lib/server/auth/principal";
 import { buildPublicInfo } from "@/lib/server/services/sync";
 
 export const metadata = { title: { absolute: "Procesos productivos S.M.I." } };
+/** Signed APK published by the "APK Android" workflow as the latest GitHub release. */
+const APK_URL = process.env.NEXT_PUBLIC_APK_URL?.trim() || "https://github.com/PAIRX-PAIR/MediAdh/releases/latest/download/smi-procesos.apk";
 
 const STEPS = [
   {
@@ -129,6 +131,12 @@ export default async function Home() {
             {info.demo && (
               <p className="mt-4 text-sm text-vacant">Demostración con datos ficticios: entra como coordinador o mira el tablero de operarios.</p>
             )}
+            <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-ink-soft">
+              <a href={APK_URL} className="inline-flex items-center gap-2 font-semibold text-glow underline-offset-4 hover:underline">
+                <Download className="size-4" aria-hidden /> Descargar para Android
+              </a>
+              <span className="text-muted">iPhone: ábrela en Safari → Compartir → «Agregar a pantalla de inicio».</span>
+            </div>
           </div>
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-32 bg-gradient-to-b from-transparent to-abyss" aria-hidden />
         </section>

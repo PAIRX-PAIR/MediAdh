@@ -22,7 +22,8 @@ on:
         default: "1"
 
 permissions:
-  contents: read
+  # Publishes the signed APK as a release asset (public download link for the website).
+  contents: write
 
 jobs:
   build:
@@ -76,6 +77,16 @@ jobs:
           # Huella del certificado: debe coincidir con ANDROID_CERT_SHA256 en Vercel (assetlinks.json).
           keytool -list -v -keystore android.keystore -alias smi -storepass "$BUBBLEWRAP_KEYSTORE_PASSWORD" | grep -E "SHA256:" || true
           rm -f android.keystore
+
+      - name: Publicar el APK para descargar
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION_NAME: ${{ inputs.version_name }}
+          VERSION_CODE: ${{ inputs.version_code }}
+        run: |
+          set -euo pipefail
+          cp twa/app-release-signed.apk twa/smi-procesos.apk
+          gh release create "android-v${VERSION_NAME}-${VERSION_CODE}" twa/smi-procesos.apk             --title "App Android ${VERSION_NAME}"             --notes "APK firmado de Procesos productivos S.M.I. Se descarga desde la página de inicio de la app."             --target "${GITHUB_SHA}" --latest
 
       - uses: actions/upload-artifact@v4
         with:
