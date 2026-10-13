@@ -13,6 +13,7 @@ import { NumberInput, PageHeader, SectionTitle } from "@/components/ui/kit";
 import { Button, Chip, Field, Input, Select, cn } from "@/components/ui/primitives";
 import { useProduction } from "@/lib/client/use-production";
 import { MACHINE_STATE_LABEL, PROCESS_LABEL, formatDate } from "@/lib/domain/labels";
+import { weeklyHours } from "@/lib/domain/calendar";
 import { canCommit } from "@/lib/domain/planning";
 import { PROCESSES, type Machine, type Process } from "@/lib/domain/schema";
 import { addDays } from "@/lib/domain/time";
@@ -139,7 +140,7 @@ export function QueueScreen() {
                 <span className="min-w-0">
                   <span className="block truncate font-semibold text-ink">{m.name}</span>
                   <span className="block text-xs text-muted">
-                    {PROCESS_LABEL[m.process]} · {m.hoursPerDay} h/día{m.activeSince && m.state !== "inactiva" ? ` · desde ${formatDate(m.activeSince)}` : ""}
+                    {PROCESS_LABEL[m.process]} · {m.hoursPerDay === null ? "horario del taller" : `máx. ${m.hoursPerDay} h/día`}{m.activeSince && m.state !== "inactiva" ? ` · desde ${formatDate(m.activeSince)}` : ""}
                   </span>
                 </span>
                 <Chip tone={m.state === "activa" ? "done" : m.state === "mantenimiento" ? "pending" : "vacant"}>{MACHINE_STATE_LABEL[m.state]}</Chip>
@@ -148,9 +149,9 @@ export function QueueScreen() {
           ))}
         </ul>
         <p className="mt-2 text-xs text-muted">
-          Calendario: {data.production.calendar.workdays.length} días laborales por semana{data.production.calendar.saturdayHours !== null ? `, sábado hasta ${data.production.calendar.saturdayHours} h` : ""}
+          Horario del taller: {weeklyHours(data.production.calendar.schedule).toLocaleString("es-CO")} h por semana
           {data.production.calendar.skipHolidays ? ", sin festivos de Colombia" : ""}. Se cambia en{" "}
-          <Link href="/admin/ajustes#produccion" className="font-semibold text-glow hover:underline">
+          <Link href="/admin/ajustes#horario" className="font-semibold text-glow hover:underline">
             Ajustes
           </Link>
           .

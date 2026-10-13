@@ -5,7 +5,7 @@
  * - Every push also tells open windows to sync now (postMessage "smi:push").
  * - Offline: navigations fall back to the cached /offline page. API calls are never cached.
  */
-const VERSION = "smi-v1";
+const VERSION = "smi-v2";
 const SHELL = ["/offline", "/icons/192", "/icons/96", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
@@ -37,14 +37,15 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(fetch(req).catch(() => caches.match("/offline").then((r) => r || Response.error())));
     return;
   }
-  // Hashed build assets never change: cache first.
+  // Hashed build assets never change: cache first. Only responses marked immutable are stored,
+  // so the development server (un-hashed chunks, no-store) is never served stale code.
   if (url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/icons/")) {
     event.respondWith(
       caches.match(req).then(
         (hit) =>
           hit ||
           fetch(req).then((res) => {
-            if (res.ok) {
+            if (res.ok && (url.pathname.startsWith("/icons/") || /immutable/.test(res.headers.get("cache-control") || ""))) {
               const copy = res.clone();
               caches.open(VERSION).then((cache) => cache.put(req, copy));
             }

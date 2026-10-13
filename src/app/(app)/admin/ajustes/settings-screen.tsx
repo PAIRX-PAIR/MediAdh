@@ -1,15 +1,16 @@
 "use client";
 
-import { ClipboardPaste, FileCheck2, Plus, Save, Trash2 } from "lucide-react";
+import { ClipboardPaste, FileCheck2, Plus, Save, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { useSync } from "@/components/providers/sync-provider";
-import { MoneyInput, NumberInput, PageHeader } from "@/components/ui/kit";
+import { MoneyInput, NumberInput, PageHeader, TimeInput } from "@/components/ui/kit";
 import { Modal, useConfirm } from "@/components/ui/overlay";
 import { Button, Field, Input, Panel, Textarea, cn } from "@/components/ui/primitives";
 import { api } from "@/lib/client/api";
 import { useAction } from "@/lib/client/use-action";
 import { useProduction } from "@/lib/client/use-production";
+import { DEFAULT_WEEK_SCHEDULE, minutesOf, shiftsMinutes, weeklyHours, type WeekSchedule } from "@/lib/domain/calendar";
 import { ipcVariations } from "@/lib/domain/ipc";
 import { PROCESS_LABEL, WEEKDAY_LABEL, formatDate } from "@/lib/domain/labels";
 import { formatNit, parseNit } from "@/lib/domain/nit";
@@ -34,6 +35,7 @@ export function SettingsScreen() {
       <nav aria-label="Secciones" className="flex flex-wrap gap-2 text-sm">
         {[
           ["#taller", "Taller y acceso"],
+          ["#horario", "Horario"],
           ["#produccion", "Producción y tarifas"],
           ["#ipc", "IPC (DANE)"],
           ["#empresa", "Datos legales"],
@@ -47,6 +49,7 @@ export function SettingsScreen() {
         </Link>
       </nav>
       <WorkshopSection />
+      <ScheduleSection />
       <ProductionSection />
       <IpcSection />
       <LegalSection />
@@ -120,37 +123,9 @@ function ProductionSection() {
     <Section
       id="produccion"
       title="Producción y tarifas"
-      description="Calendario de trabajo (capacidad), tarifas por hora del cotizador y reglas de cierre. Las tarifas empiezan en $0: ponlas tú, no se inventan precios."
+      description="Tarifas por hora del cotizador y reglas de cierre. Las tarifas empiezan en $0: ponlas tú, no se inventan precios."
     >
       <div className="flex flex-col gap-5">
-        <fieldset>
-          <legend className="mb-2 text-sm font-medium text-ink-soft">Días laborales</legend>
-          <div className="flex flex-wrap gap-2">
-            {[1, 2, 3, 4, 5, 6, 7].map((d) => {
-              const on = form.workdays.includes(d);
-              return (
-                <button
-                  key={d}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => set("workdays", on ? form.workdays.filter((x) => x !== d) : [...form.workdays, d].sort())}
-                  className={cn("h-11 min-w-14 rounded-xl border px-3 font-semibold", on ? "border-glow bg-navy-700/60 text-ink" : "border-line text-muted")}
-                >
-                  {WEEKDAY_LABEL[d]}
-                </button>
-              );
-            })}
-          </div>
-        </fieldset>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Horas del sábado" hint="Vacío = igual que entre semana.">
-            {(id, d) => <NumberInput id={id} ariaDescribedBy={d} max={24} value={form.saturdayHours} onChange={(v) => set("saturdayHours", v)} suffix="h" />}
-          </Field>
-          <label className="flex items-center gap-3 rounded-xl border border-line bg-night/50 p-3 text-sm text-ink-soft sm:col-span-2">
-            <input type="checkbox" checked={form.skipHolidays} onChange={(e) => set("skipHolidays", e.target.checked)} className="size-5 accent-[var(--color-glow)]" />
-            No contar los festivos de Colombia (Ley Emiliani) en la capacidad.
-          </label>
-        </div>
         <div>
           <p className="mb-2 text-sm font-medium text-ink-soft">Tarifa por hora para cotizar (antes de IVA)</p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -169,8 +144,109 @@ function ProductionSection() {
             {(id, d) => <NumberInput id={id} ariaDescribedBy={d} integer min={1} max={60} value={form.claimWindowDays} onChange={(v) => set("claimWindowDays", v ?? 3)} suffix="días" />}
           </Field>
         </div>
-        <Button className="self-start" loading={busy === "p"} icon={<Save className="size-4" />} onClick={() => void run("p", () => api.admin.updateProduction(form), "Producción actualizada")}>
+        <Button
+          className="self-start"
+          loading={busy === "p"}
+          icon={<Save className="size-4" />}
+          onClick={() => {
+            // The schedule has its own section and save button.
+            const { schedule: _schedule, skipHolidays: _skip, ...rest } = form;
+            void _schedule;
+            void _skip;
+            void run("p", () => api.admin.updateProduction(rest), "Producción actualizada");
+          }}
+        >
           Guardar producción
+        </Button>
+      </div>
+    </Section>
+  );
+}
+
+const hoursLabel = (minutes: number) => `${(minutes / 60).toLocaleString("es-CO", { maximumFractionDigits: 2 })} h`;
+
+/** Horario del taller por turnos: capacidad de las máquinas y horas ordinarias del equipo. */
+function ScheduleSection() {
+  const prod = useProduction();
+  const [schedule, setSchedule] = useState<WeekSchedule>(prod.settings?.schedule ?? DEFAULT_WEEK_SCHEDULE);
+  const [skipHolidays, setSkipHolidays] = useState(prod.settings?.skipHolidays ?? true);
+  const { run, busy } = useAction();
+  const setDay = (day: number, shifts: WeekSchedule[number]) => setSchedule((s) => s.map((d, i) => (i === day ? shifts : d)));
+  const invalid = schedule.some((day) => day.some((s, i) => minutesOf(s.end) <= minutesOf(s.start) || (i > 0 && minutesOf(s.start) < minutesOf(day[i - 1]!.end))));
+  const total = weeklyHours(schedule);
+  if (!prod.settings) return null;
+  return (
+    <Section
+      id="horario"
+      title="Horario del taller"
+      description="Turnos de cada día. Define la capacidad de las máquinas y las horas ordinarias del equipo: todo lo trabajado por fuera es hora extra (Nómina)."
+    >
+      <div className="flex flex-col gap-3">
+        {schedule.map((shifts, day) => (
+          <div key={day} className="flex flex-col gap-2 rounded-xl border border-line bg-night/40 p-3 sm:flex-row sm:items-center">
+            <div className="flex w-full items-center justify-between sm:w-28 sm:flex-col sm:items-start">
+              <span className="font-semibold text-ink">{WEEKDAY_LABEL[day + 1]}</span>
+              <span className="tabular text-xs text-muted">{shifts.length ? hoursLabel(shiftsMinutes(shifts)) : "No se trabaja"}</span>
+            </div>
+            <div className="flex flex-1 flex-wrap items-center gap-2">
+              {shifts.map((shift, i) => (
+                <div key={i} className="flex items-center gap-1 rounded-lg border border-line px-2 py-1">
+                  <TimeInput
+                    aria-label={`${WEEKDAY_LABEL[day + 1]} turno ${i + 1} desde`}
+                    className="h-9"
+                    value={shift.start}
+                    onChange={(e) => setDay(day, shifts.map((s, j) => (j === i ? { ...s, start: e.target.value } : s)))}
+                  />
+                  <span className="text-muted">a</span>
+                  <TimeInput
+                    aria-label={`${WEEKDAY_LABEL[day + 1]} turno ${i + 1} hasta`}
+                    className="h-9"
+                    value={shift.end}
+                    onChange={(e) => setDay(day, shifts.map((s, j) => (j === i ? { ...s, end: e.target.value } : s)))}
+                  />
+                  <button
+                    type="button"
+                    aria-label="Quitar turno"
+                    className="grid size-9 place-items-center text-muted hover:text-blocked"
+                    onClick={() => setDay(day, shifts.filter((_, j) => j !== i))}
+                  >
+                    <X className="size-4" />
+                  </button>
+                </div>
+              ))}
+              {shifts.length < 4 && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon={<Plus className="size-4" />}
+                  onClick={() => {
+                    const last = shifts[shifts.length - 1];
+                    setDay(day, [...shifts, last ? { start: last.end, end: last.end } : { start: "08:00", end: "12:00" }]);
+                  }}
+                >
+                  Turno
+                </Button>
+              )}
+            </div>
+          </div>
+        ))}
+        <p className={cn("text-sm", total > 42 ? "text-pending" : "text-ink-soft")}>
+          Total semanal: <strong className="tabular text-ink">{total.toLocaleString("es-CO", { maximumFractionDigits: 2 })} h</strong>
+          {total > 42 && " · supera la jornada máxima legal de 42 h (Ley 2101 de 2021, desde julio de 2026)."}
+        </p>
+        {invalid && <p className="text-sm text-blocked">Revisa los turnos: cada uno debe terminar después de empezar y no cruzarse con el anterior.</p>}
+        <label className="flex items-center gap-3 rounded-xl border border-line bg-night/50 p-3 text-sm text-ink-soft">
+          <input type="checkbox" checked={skipHolidays} onChange={(e) => setSkipHolidays(e.target.checked)} className="size-5 accent-[var(--color-glow)]" />
+          Los festivos de Colombia (Ley Emiliani) no se trabajan: no cuentan en la capacidad y lo trabajado ese día es extra festiva.
+        </label>
+        <Button
+          className="self-start"
+          loading={busy === "h"}
+          disabled={invalid}
+          icon={<Save className="size-4" />}
+          onClick={() => void run("h", () => api.admin.updateProduction({ schedule, skipHolidays }), "Horario guardado")}
+        >
+          Guardar horario
         </Button>
       </div>
     </Section>

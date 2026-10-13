@@ -1,18 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { calendarHours, colombianHolidays, easterSunday } from "./calendar";
+import { DEFAULT_WEEK_SCHEDULE, calendarHours, colombianHolidays, easterSunday, weeklyHours, type WorkCalendar } from "./calendar";
 import { defaultMachines } from "./defaults";
 import { diffFields, recordChange } from "./diff";
 import { adjustForInflation, ipcVariations } from "./ipc";
 import { lastMonths, managementIndex, monthlyKpis, machineKpis } from "./kpi";
 import { canTransition, dueReminders, isLate, shouldAutoClose, statusFromWork } from "./lifecycle";
 import { formatNit, parseNit, verificationDigit } from "./nit";
+import { dayHours, liquidate, quincenaOf, shiftQuincena } from "./payroll";
 import { canCommit, machineHoursOn, nextUp, occupancy, planOrders, prioritize, type PlanContext } from "./planning";
 import { quoteDisplayStatus, quoteTotals } from "./quote";
 import type { Machine, Order, WorkItem } from "./schema";
 import { zonedInstant } from "./time";
 
 const TZ = "America/Bogota";
-const CAL = { workdays: [1, 2, 3, 4, 5, 6], saturdayHours: 4, skipHolidays: true };
+/** Test calendar: 8 h from 07:00 (with a lunch hour) Monday–Friday, 4 h on Saturday. */
+const WEEKDAY = [{ start: "07:00", end: "11:00" }, { start: "12:00", end: "16:00" }];
+const CAL: WorkCalendar = { schedule: [WEEKDAY, WEEKDAY, WEEKDAY, WEEKDAY, WEEKDAY, [{ start: "07:00", end: "11:00" }], []], skipHolidays: true };
 
 describe("NIT y dígito de verificación DIAN", () => {
   it("calcula el DV de NITs conocidos", () => {
@@ -47,6 +50,78 @@ describe("calendario laboral de Colombia", () => {
     expect(calendarHours("2026-10-18", 8, CAL)).toBe(0); // domingo
     expect(calendarHours("2026-10-12", 8, CAL)).toBe(0); // Día de la Raza
     expect(calendarHours("2026-10-12", 8, { ...CAL, skipHolidays: false })).toBe(8);
+    expect(calendarHours("2026-10-13", 6, CAL)).toBe(6); // tope propio de la máquina
+  });
+
+  it("el horario de S.M.I. suma 42 horas semanales", () => {
+    const smi: WorkCalendar = { schedule: DEFAULT_WEEK_SCHEDULE, skipHolidays: true };
+    expect(weeklyHours(DEFAULT_WEEK_SCHEDULE)).toBe(42);
+    expect(calendarHours("2026-10-16", null, smi)).toBe(7); // viernes 8–12 y 13:30–16:30
+    expect(calendarHours("2026-10-14", null, smi)).toBe(8); // miércoles 7:30–12 y 13:30–17
+    expect(calendarHours("2026-10-17", null, smi)).toBe(4); // sábado
+  });
+});
+
+describe("nómina quincenal", () => {
+  const smi: WorkCalendar = { schedule: DEFAULT_WEEK_SCHEDULE, skipHolidays: true };
+  const settings = {
+    monthlyHours: 210,
+    extraDayPct: 25,
+    extraNightPct: 75,
+    sundayHolidayPct: 90,
+    nightStart: "19:00",
+    nightEnd: "06:00",
+    roundingMinutes: 15,
+    healthPct: 4,
+    pensionPct: 4,
+    transportAllowance: 200_000,
+  };
+  let n = 0;
+  const block = (date: string, start: string, end: string | null) => ({
+    id: `a${++n}`,
+    userId: "u1",
+    userName: "Operario",
+    date,
+    start,
+    end,
+    note: "",
+    source: "operario" as const,
+    createdBy: "u1",
+    createdAt: "2026-10-01T12:00:00.000Z",
+    updatedAt: "2026-10-01T12:00:00.000Z",
+    history: [],
+  });
+
+  it("quincenas del 1 al 15 y del 16 a fin de mes, pago el 15 y el 30", () => {
+    expect(quincenaOf("2026-10-12")).toEqual({ key: "2026-10-1", from: "2026-10-01", to: "2026-10-15", payDate: "2026-10-15" });
+    expect(quincenaOf("2026-10-20")).toMatchObject({ to: "2026-10-31", payDate: "2026-10-30" });
+    expect(quincenaOf("2026-02-20")).toMatchObject({ to: "2026-02-28", payDate: "2026-02-28" });
+    expect(shiftQuincena(quincenaOf("2026-01-05"), -1).key).toBe("2025-12-2");
+  });
+
+  it("clasifica las extras: diurna, nocturna desde las 7 p. m., dominical y festiva", () => {
+    const tue = dayHours("2026-10-13", [block("2026-10-13", "07:30", "12:00"), block("2026-10-13", "13:30", "18:30")], smi, settings);
+    expect(tue).toMatchObject({ ordinaryMinutes: 480, minutes: { extraDay: 90, extraNight: 0 } });
+    const fri = dayHours("2026-10-16", [block("2026-10-16", "13:30", "20:00")], smi, settings);
+    expect(fri.minutes).toMatchObject({ extraDay: 150, extraNight: 60 });
+    expect(dayHours("2026-10-18", [block("2026-10-18", "08:00", "12:00")], smi, settings).minutes.extraHolidayDay).toBe(240); // domingo
+    expect(dayHours("2026-10-12", [block("2026-10-12", "08:00", "10:00")], smi, settings)).toMatchObject({ special: "Día de la Raza", minutes: { extraHolidayDay: 120 } });
+    // Minutos sueltos por fuera del horario no alcanzan un bloque de 15 min.
+    expect(dayHours("2026-10-14", [block("2026-10-14", "07:30", "12:07")], smi, settings).minutes.extraDay).toBe(0);
+    // Un bloque sin salida no cuenta hasta que se corrija.
+    expect(dayHours("2026-10-14", [block("2026-10-14", "07:30", null)], smi, settings)).toMatchObject({ workedMinutes: 0, openEntries: 1 });
+  });
+
+  it("liquida básico, extras, auxilio y descuentos de ley", () => {
+    const [line] = liquidate({
+      people: [{ id: "u1", displayName: "Operario", monthlySalary: 2_100_000, transportAllowance: true }],
+      entries: [block("2026-10-13", "07:30", "12:00"), block("2026-10-13", "13:30", "18:30")],
+      quincena: quincenaOf("2026-10-13"),
+      calendar: smi,
+      settings,
+    });
+    expect(line).toMatchObject({ hourlyValue: 10_000, basic: 1_050_000, extrasTotal: 18_750, transport: 100_000, health: 42_750, pension: 42_750, net: 1_083_250 });
+    expect(line!.scheduledHours).toBe(85); // 1–15 oct 2026 con el festivo del lunes 12
   });
 });
 
@@ -181,7 +256,9 @@ describe("capacidad de máquinas", () => {
   it("hoy solo cuenta lo que queda del turno", () => {
     const m = machines().find((x) => x.id === "pinacho")!;
     const noon = zonedInstant("2026-10-13", "12:00", TZ).getTime();
-    expect(machineHoursOn(m, "2026-10-13", ctx(), noon)).toBe(3);
+    expect(machineHoursOn(m, "2026-10-13", ctx(), noon)).toBe(4); // turno de la tarde 12:00–16:00
+    const ten = zonedInstant("2026-10-13", "10:00", TZ).getTime();
+    expect(machineHoursOn(m, "2026-10-13", ctx(), ten)).toBe(5); // 10–11 y 12–16, el almuerzo no cuenta
   });
 });
 

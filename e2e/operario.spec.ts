@@ -8,6 +8,8 @@ test.describe("operario en el celular", () => {
     await expect(page).toHaveURL(/\/panel$/);
     await expect(page.getByRole("heading", { level: 1, name: "Hola, Carlos" })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Barra de tareas" })).toBeVisible();
+    await page.getByRole("button", { name: "Marcar entrada" }).click();
+    await expect(page.getByRole("button", { name: /Marcar salida \(entraste a las \d{2}:\d{2}\)/ })).toBeVisible();
 
     await page.getByRole("navigation", { name: "Barra de tareas" }).getByRole("link", { name: /Tareas/ }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Mis tareas" })).toBeVisible();

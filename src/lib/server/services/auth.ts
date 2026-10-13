@@ -75,6 +75,8 @@ export async function ensureBootstrapAdmin(username: string) {
       approvedBy: null,
       approvedAt: now,
       lastLoginAt: null,
+      monthlySalary: null,
+      transportAllowance: false,
     };
     draft.items.push(user);
     audit(log, { id: null, name: "Sistema" }, "admin_entorno_creado", user.id, cfg.username);
@@ -222,6 +224,8 @@ export async function register(input: RegisterInput, ip: string): Promise<{ noti
       approvedBy: null,
       approvedAt: null,
       lastLoginAt: null,
+      monthlySalary: null,
+      transportAllowance: false,
     };
     users.items.push(user);
     const actor = { id: user.id, name: user.displayName };
@@ -327,6 +331,8 @@ export async function setupFirstAdmin(
       approvedBy: null,
       approvedAt: now,
       lastLoginAt: null,
+      monthlySalary: null,
+      transportAllowance: false,
     };
     users.items.push(user);
     audit(log, { id: user.id, name: user.displayName }, "admin_inicial_creado", user.id);

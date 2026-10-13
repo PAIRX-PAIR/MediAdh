@@ -1,6 +1,7 @@
 "use client";
 
 import type {
+  Attendance,
   AttachmentKind,
   ClaimKind,
   Client,
@@ -11,6 +12,7 @@ import type {
   MachineState,
   Order,
   OrderStatus,
+  PayrollSettings,
   Process,
   ProductionSettings,
   Quote,
@@ -23,6 +25,36 @@ import type {
 } from "@/lib/domain/schema";
 import type { AttachmentView, ClientView, OrderView, PublicInfo, QuoteView, SyncPayload } from "@/lib/domain/views";
 import type { Indicators } from "@/lib/server/services/indicators";
+import type { HourKind, PayrollLine, Quincena } from "@/lib/domain/payroll";
+
+export interface MyAttendance {
+  today: Attendance[];
+  open: Attendance | null;
+  quincena: Quincena;
+  hours: Record<HourKind, number>;
+  workedHours: number;
+  scheduledHours: number;
+}
+
+export interface PayrollPersonView {
+  id: string;
+  displayName: string;
+  username: string;
+  monthlySalary: number | null;
+  transportAllowance: boolean;
+  positionTitle: string | null;
+}
+
+export interface PayrollReport {
+  quincena: Quincena;
+  previous: string;
+  next: string;
+  current: string;
+  settings: PayrollSettings;
+  people: PayrollPersonView[];
+  lines: PayrollLine[];
+  entries: Array<Omit<Attendance, "history">>;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -135,7 +167,7 @@ export interface MachineInput {
   description: string;
   state: MachineState;
   activeSince: string | null;
-  hoursPerDay: number;
+  hoursPerDay: number | null;
   hourlyRate: number;
   positionId: string | null;
 }
@@ -413,5 +445,23 @@ export const api = {
     remove: (id: string) => request<{ ok: true }>(`/api/adjuntos/${encodeURIComponent(id)}`, { method: "DELETE" }),
   },
 
-  exportUrl: (kind: "ordenes" | "clientes") => `/api/admin/export?tipo=${kind}`,
+  exportUrl: (kind: "ordenes" | "clientes" | "nomina", quincena?: string) =>
+    `/api/admin/export?tipo=${kind}${quincena ? `&quincena=${encodeURIComponent(quincena)}` : ""}`,
+
+  attendance: {
+    mine: () => request<MyAttendance>("/api/asistencia"),
+    clock: (action: "in" | "out") => request<{ entry: Attendance }>("/api/asistencia", { method: "POST", body: { action } }),
+    create: (input: { userId: string; date: string; start: string; end: string | null; note?: string }) =>
+      request<{ entry: Attendance }>("/api/admin/asistencia", { method: "POST", body: input }),
+    update: (id: string, patch: { date?: string; start?: string; end?: string | null; note?: string }) =>
+      request<{ entry: Attendance }>(`/api/admin/asistencia/${encodeURIComponent(id)}`, { method: "PATCH", body: patch }),
+    remove: (id: string) => request<{ ok: true }>(`/api/admin/asistencia/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  },
+
+  payroll: {
+    report: (quincena?: string) => request<PayrollReport>(`/api/admin/nomina${quincena ? `?quincena=${encodeURIComponent(quincena)}` : ""}`),
+    setPay: (userId: string, input: { monthlySalary?: number | null; transportAllowance?: boolean }) =>
+      request<{ ok: true }>(`/api/admin/users/${encodeURIComponent(userId)}/pay`, { method: "PATCH", body: input }),
+    updateSettings: (payroll: Partial<PayrollSettings>) => request<{ ok: true }>("/api/admin/settings", { method: "PATCH", body: { payroll } }),
+  },
 };

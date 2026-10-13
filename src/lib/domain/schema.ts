@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DEFAULT_WEEK_SCHEDULE, minutesOf } from "./calendar";
 
 /**
  * Persisted domain model. Every document read from the data repository is
@@ -9,6 +10,7 @@ import { z } from "zod";
 export const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida (AAAA-MM-DD)");
 export const isoDateTime = z.string().datetime({ offset: true });
 export const id = z.string().min(1).max(64);
+export const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Hora inválida (HH:mm)");
 
 export const USER_KINDS = ["admin", "staff"] as const;
 export const USER_STATUSES = ["pending", "active", "rejected", "disabled"] as const;
@@ -41,6 +43,10 @@ export const userSchema = z.object({
   approvedBy: z.string().nullable().default(null),
   approvedAt: isoDateTime.nullable().default(null),
   lastLoginAt: isoDateTime.nullable().default(null),
+  /** Nómina (admin only): monthly salary in COP; null = not set yet. */
+  monthlySalary: z.number().min(0).nullable().default(null),
+  /** Receives the auxilio de transporte with each payment. */
+  transportAllowance: z.boolean().default(false),
 });
 export type User = z.infer<typeof userSchema>;
 
@@ -299,7 +305,8 @@ export const machineSchema = z.object({
   state: z.enum(MACHINE_STATES),
   /** First day it counts for capacity and indicators (AAAA-MM-DD). */
   activeSince: isoDate.nullable().default(null),
-  hoursPerDay: z.number().min(0).max(24),
+  /** Cap on the workshop schedule (h/día); null = follows the workshop schedule. */
+  hoursPerDay: z.number().min(0).max(24).nullable().default(null),
   /** COP per hour, used to cost actual work. */
   hourlyRate: z.number().min(0).default(0),
   /** Position that usually runs it; new work steps on this machine go to that position. */
@@ -538,11 +545,19 @@ export const ipcEntrySchema = z.object({
 });
 export type IpcEntry = z.infer<typeof ipcEntrySchema>;
 
+export const shiftSchema = z
+  .object({ start: hhmm, end: hhmm })
+  .refine((s) => minutesOf(s.end) > minutesOf(s.start), "El turno debe terminar después de empezar.");
+
+/** Weekly schedule: index 0 = lunes … 6 = domingo; shifts in order and without overlaps. */
+export const weekScheduleSchema = z
+  .array(z.array(shiftSchema).max(4))
+  .length(7)
+  .refine((days) => days.every((day) => day.every((s, i) => i === 0 || minutesOf(s.start) >= minutesOf(day[i - 1]!.end))), "Los turnos de un día van en orden y sin cruzarse.");
+
 export const productionSettingsSchema = z.object({
-  /** ISO weekdays that are working days (1 = lunes … 7 = domingo). */
-  workdays: z.array(z.number().int().min(1).max(7)).default([1, 2, 3, 4, 5, 6]),
-  /** Saturday capacity cap in hours (half day); null = same as weekdays. */
-  saturdayHours: z.number().min(0).max(24).nullable().default(4),
+  /** Horario del taller: capacity of the machines and ordinary hours of the team. */
+  schedule: weekScheduleSchema.default(DEFAULT_WEEK_SCHEDULE),
   /** Skip Colombian public holidays in capacity. */
   skipHolidays: z.boolean().default(true),
   /** COP per hour by process, used by the quoting tool. 0 = not configured yet. */
@@ -564,6 +579,49 @@ export const productionSettingsSchema = z.object({
   claimWindowDays: z.number().int().min(1).max(60).default(3),
 });
 export type ProductionSettings = z.infer<typeof productionSettingsSchema>;
+
+/**
+ * Nómina quincenal (pagos los días 15 y 30). Defaults follow Colombian law as of
+ * 2026 (CST arts. 168 y 179, Ley 2466 de 2025): extra diurna +25 %, extra
+ * nocturna +75 %, dominical/festivo +90 % desde el 1-jul-2026 (+100 % desde el
+ * 1-jul-2027), jornada nocturna desde las 19:00. Everything is editable.
+ */
+export const payrollSettingsSchema = z.object({
+  /** Divisor for the hourly value: monthly salary / monthlyHours (42 h × 5 = 210). */
+  monthlyHours: z.number().min(1).max(400).default(210),
+  extraDayPct: z.number().min(0).max(300).default(25),
+  extraNightPct: z.number().min(0).max(300).default(75),
+  sundayHolidayPct: z.number().min(0).max(300).default(90),
+  nightStart: hhmm.default("19:00"),
+  nightEnd: hhmm.default("06:00"),
+  /** Overtime per day is counted in blocks of this many minutes (0 = exact). */
+  roundingMinutes: z.number().int().min(0).max(60).default(15),
+  /** Employee deductions over salary + overtime (%). */
+  healthPct: z.number().min(0).max(100).default(4),
+  pensionPct: z.number().min(0).max(100).default(4),
+  /** Monthly auxilio de transporte (COP) for those who have it; 0 until the admin sets it. */
+  transportAllowance: z.number().min(0).default(0),
+});
+export type PayrollSettings = z.infer<typeof payrollSettingsSchema>;
+
+/** One clock-in/clock-out block of a person (registro de horas). */
+export const attendanceSchema = z.object({
+  id,
+  userId: z.string(),
+  userName: z.string(),
+  date: isoDate,
+  start: hhmm,
+  /** null while the person is still clocked in. */
+  end: hhmm.nullable().default(null),
+  note: z.string().default(""),
+  /** operario = marked from the phone; admin = entered or corrected by an admin. */
+  source: z.enum(["operario", "admin"]),
+  createdBy: z.string(),
+  createdAt: isoDateTime,
+  updatedAt: isoDateTime,
+  history: z.array(changeEntrySchema).default([]),
+});
+export type Attendance = z.infer<typeof attendanceSchema>;
 
 export const legalInfoSchema = z.object({
   /** Razón social del responsable del tratamiento. */
@@ -593,6 +651,7 @@ export const settingsSchema = z.object({
   bootstrapAdmins: z.array(z.string()).default([]),
   legal: legalInfoSchema,
   production: productionSettingsSchema.default(productionSettingsSchema.parse({})),
+  payroll: payrollSettingsSchema.default(payrollSettingsSchema.parse({})),
   updatedAt: isoDateTime,
 });
 export type Settings = z.infer<typeof settingsSchema>;
@@ -623,6 +682,7 @@ export const COLLECTIONS = {
   quotes: collectionSchema(quoteSchema),
   attachments: collectionSchema(attachmentSchema),
   ipc: collectionSchema(ipcEntrySchema),
+  attendance: collectionSchema(attendanceSchema),
 } as const;
 
 export type CollectionName = keyof typeof COLLECTIONS;
@@ -644,6 +704,7 @@ export interface Database {
   quotes: Collection<Quote>;
   attachments: Collection<Attachment>;
   ipc: Collection<IpcEntry>;
+  attendance: Collection<Attendance>;
 }
 
 export type DocName = keyof Database;
@@ -678,6 +739,7 @@ export const DOC_LAYOUT: Record<DocName, DocLayout> = {
   quotes: { kind: "sharded", dir: "cotizaciones" },
   attachments: { kind: "single" },
   ipc: { kind: "single" },
+  attendance: { kind: "sharded", dir: "asistencia" },
 };
 
 export const DOC_NAMES = Object.keys(DOC_LAYOUT) as DocName[];

@@ -1,4 +1,4 @@
-import { calendarHours, type WorkCalendar } from "./calendar";
+import { shiftsOn, type WorkCalendar } from "./calendar";
 import type { Machine, Order, OrderStatus, Process, WorkItem } from "./schema";
 import { addDays, daysBetween, zonedInstant } from "./time";
 
@@ -9,12 +9,11 @@ import { addDays, daysBetween, zonedInstant } from "./time";
  *
  * Simplifications (documented for the boss, all adjustable later):
  * - Process steps of one order may run in parallel on different machines.
- * - The productive window of a day starts at 07:00; Saturday hours and
- *   holidays come from the work calendar.
+ * - Capacity comes from the workshop's weekly shifts (horario) and skips
+ *   Colombian holidays; a machine may cap it with its own hours per day.
  * - Jobs are dispatched by earliest due date (EDD), ties by difficulty.
  */
 
-export const DAY_START = "07:00";
 const HOUR = 3_600_000;
 const MAX_DAYS = 730;
 const EPS = 1e-6;
@@ -42,25 +41,33 @@ function overlapMs(aFrom: number, aTo: number, bFrom: number, bTo: number): numb
 }
 
 /**
- * Productive hours of `m` on `date`, minus maintenance stops. `notBefore`
- * trims the window (used for "today": only what is left of the shift counts).
+ * Productive hours of `m` on `date` inside the workshop shifts, minus
+ * maintenance stops. `notBefore` / `notAfter` trim the window (today: only
+ * what is left of the shifts counts; due day: only what comes before the time).
  */
-export function machineHoursOn(m: Machine, date: string, ctx: Pick<PlanContext, "calendar" | "timezone">, notBefore?: number): number {
+export function machineHoursOn(m: Machine, date: string, ctx: Pick<PlanContext, "calendar" | "timezone">, notBefore?: number, notAfter?: number): number {
   if (m.state === "inactiva") return 0;
   if (m.activeSince && date < m.activeSince) return 0;
-  const base = calendarHours(date, m.hoursPerDay, ctx.calendar);
-  if (base <= 0) return 0;
-  const start = zonedInstant(date, DAY_START, ctx.timezone).getTime();
-  const end = start + base * HOUR;
-  const from = notBefore !== undefined ? Math.max(start, notBefore) : start;
-  if (from >= end) return 0;
-  let stopped = 0;
-  for (const stop of m.stops) {
-    const sFrom = Date.parse(stop.from);
-    const sTo = stop.to ? Date.parse(stop.to) : Number.POSITIVE_INFINITY;
-    stopped += overlapMs(from, end, sFrom, sTo);
+  // A machine's own hours/day cap the schedule, counted from the first shift.
+  let budget = m.hoursPerDay === null ? Number.POSITIVE_INFINITY : m.hoursPerDay * HOUR;
+  let total = 0;
+  for (const shift of shiftsOn(date, ctx.calendar)) {
+    if (budget <= 0) break;
+    const start = zonedInstant(date, shift.start, ctx.timezone).getTime();
+    const end = Math.min(zonedInstant(date, shift.end, ctx.timezone).getTime(), start + budget);
+    budget -= end - start;
+    const from = notBefore !== undefined ? Math.max(start, notBefore) : start;
+    const to = notAfter !== undefined ? Math.min(end, notAfter) : end;
+    if (from >= to) continue;
+    let stopped = 0;
+    for (const stop of m.stops) {
+      const sFrom = Date.parse(stop.from);
+      const sTo = stop.to ? Date.parse(stop.to) : Number.POSITIVE_INFINITY;
+      stopped += overlapMs(from, to, sFrom, sTo);
+    }
+    total += Math.max(0, to - from - stopped);
   }
-  return Math.max(0, (end - from - stopped) / HOUR);
+  return total / HOUR;
 }
 
 /** Remaining hours of a work item (planned minus reported). */
@@ -373,8 +380,8 @@ export interface PriorityItem {
   dueDate: string | null;
 }
 
-/** Working hours of a standard shift between now and `due` (8 h days on the calendar). */
-export function shiftHoursUntil(due: number, ctx: PlanContext, shiftHours = 8): number {
+/** Working hours of the workshop schedule between now and `due`. */
+export function shiftHoursUntil(due: number, ctx: PlanContext): number {
   if (due <= ctx.now) return 0;
   const reference: Machine = {
     id: "_shift",
@@ -383,7 +390,7 @@ export function shiftHoursUntil(due: number, ctx: PlanContext, shiftHours = 8): 
     description: "",
     state: "activa",
     activeSince: null,
-    hoursPerDay: shiftHours,
+    hoursPerDay: null,
     hourlyRate: 0,
     positionId: null,
     order: 0,
@@ -397,13 +404,8 @@ export function shiftHoursUntil(due: number, ctx: PlanContext, shiftHours = 8): 
   let total = 0;
   for (let i = 0; i <= span; i++) {
     const date = addDays(ctx.today, i);
-    const full = machineHoursOn(reference, date, ctx, i === 0 ? ctx.now : undefined);
-    if (date === dueDate) {
-      // Only the part of the due day before the due time counts.
-      const start = zonedInstant(date, DAY_START, ctx.timezone).getTime();
-      const usable = Math.max(0, Math.min(full, (due - Math.max(start, i === 0 ? ctx.now : start)) / HOUR));
-      total += usable;
-    } else total += full;
+    // Only the part of the due day before the due time counts.
+    total += machineHoursOn(reference, date, ctx, i === 0 ? ctx.now : undefined, date === dueDate ? due : undefined);
   }
   return total;
 }

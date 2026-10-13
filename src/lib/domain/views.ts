@@ -145,7 +145,7 @@ export interface OrderBrief {
 export type AttachmentView = Omit<Attachment, "path" | "ref">;
 
 export interface ProductionPayload {
-  calendar: Pick<ProductionSettings, "workdays" | "saturdayHours" | "skipHolidays">;
+  calendar: Pick<ProductionSettings, "schedule" | "skipHolidays">;
   machines: MachineView[];
   /** Admin: full settings (rates, margins…). */
   settings?: ProductionSettings;

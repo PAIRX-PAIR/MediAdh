@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import type { Announcement, LegalInfo, Notification, ProductionSettings } from "@/lib/domain/schema";
+import type { Announcement, LegalInfo, Notification, PayrollSettings, ProductionSettings } from "@/lib/domain/schema";
 import { isValidTimeZone, isRealDate } from "@/lib/domain/time";
 import { hashPassword } from "../auth/password";
 import type { Principal } from "../auth/principal";
@@ -70,6 +70,8 @@ export interface SettingsPatch {
   publishPolicyVersion?: string;
   /** Calendar, tariffs and commercial defaults of the production module. */
   production?: Partial<Omit<ProductionSettings, "processRates">> & { processRates?: Partial<ProductionSettings["processRates"]> };
+  /** Nómina: hourly divisor, surcharges, deductions and transport allowance. */
+  payroll?: Partial<PayrollSettings>;
 }
 
 export async function updateSettings(principal: Principal, patch: SettingsPatch) {
@@ -95,8 +97,9 @@ export async function updateSettings(principal: Principal, patch: SettingsPatch)
     if (patch.production) {
       const { processRates, ...rest } = patch.production;
       settings.production = { ...settings.production, ...rest, processRates: { ...settings.production.processRates, ...processRates } };
-      if (settings.production.workdays.length === 0) throw badRequest("Debe haber al menos un día laboral.");
+      if (settings.production.schedule.every((day) => day.length === 0)) throw badRequest("El horario debe tener al menos un turno.");
     }
+    if (patch.payroll) settings.payroll = { ...settings.payroll, ...patch.payroll };
     settings.updatedAt = nowIso();
     const changed = Object.keys(patch).filter((k) => k !== "registrationCode");
     audit(log, actorOf(principal), "configuracion_actualizada", null, [...changed, ...(codeHash !== undefined ? ["codigo_registro"] : [])].join(", "));
@@ -158,8 +161,8 @@ export async function removePushSubscription(principal: Principal, endpoint: str
 /** Habeas data (Ley 1581 art. 8): the person can obtain every record about them. */
 export async function exportMyData(principal: Principal) {
   const db = getDb();
-  const [{ users, positions, tasks, requests, closures, push }, log] = await Promise.all([
-    db.read(["users", "positions", "tasks", "requests", "closures", "push"]),
+  const [{ users, positions, tasks, requests, closures, push, attendance }, log] = await Promise.all([
+    db.read(["users", "positions", "tasks", "requests", "closures", "push", "attendance"]),
     db.readLog("audit"),
   ]);
   const me = users.items.find((u) => u.id === principal.user.id);
@@ -178,6 +181,10 @@ export async function exportMyData(principal: Principal) {
     tasksCompleted: tasks.items.filter((t) => t.completedBy === me.id).map((t) => ({ folio: t.folio, title: t.title, completedAt: t.completedAt })),
     requests: requests.items.filter((r) => r.userId === me.id),
     dayClosures: closures.items.filter((c) => c.userId === me.id),
+    attendance: attendance.items.filter((e) => e.userId === me.id).map(({ history: _h, ...rest }) => {
+      void _h;
+      return rest;
+    }),
     devices: push.items.filter((s) => s.userId === me.id).map((s) => ({ userAgent: s.userAgent, createdAt: s.createdAt })),
     activity: log.items.filter((a) => a.actorId === me.id || a.target === me.id),
   };

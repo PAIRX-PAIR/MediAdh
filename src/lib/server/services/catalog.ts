@@ -119,7 +119,7 @@ export interface MachineInput {
   description: string;
   state: MachineState;
   activeSince: string | null;
-  hoursPerDay: number;
+  hoursPerDay: number | null;
   hourlyRate: number;
   positionId: string | null;
 }
@@ -130,7 +130,7 @@ const MACHINE_LABELS = {
   description: "Descripción",
   state: "Estado",
   activeSince: "Activa desde",
-  hoursPerDay: "Horas por día",
+  hoursPerDay: "Tope de horas por día",
   hourlyRate: "Tarifa por hora",
   positionId: "Puesto responsable",
   order: "Orden",

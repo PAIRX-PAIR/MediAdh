@@ -1,4 +1,4 @@
-import { productionSettingsSchema, type Collection, type Database, type Machine, type Position, type Settings } from "./schema";
+import { payrollSettingsSchema, productionSettingsSchema, type Collection, type Database, type Machine, type Position, type Settings } from "./schema";
 import { DEFAULT_TIMEZONE } from "./time";
 
 export const LEGAL_POLICY_VERSION = "2026-10-12";
@@ -33,8 +33,6 @@ export const DEFAULT_MACHINES: Array<Pick<Machine, "id" | "name" | "process" | "
   { id: "banco", name: "Mecánica de banco", process: "banco", description: "Ajuste y ensamble", state: "activa", order: 11, positionId: null },
 ];
 
-export const DEFAULT_HOURS_PER_DAY = 8;
-
 export function defaultMachines(now: string): Collection<Machine> {
   return {
     schema: 1,
@@ -42,7 +40,7 @@ export function defaultMachines(now: string): Collection<Machine> {
     items: DEFAULT_MACHINES.map((m) => ({
       ...m,
       activeSince: null,
-      hoursPerDay: DEFAULT_HOURS_PER_DAY,
+      hoursPerDay: null,
       hourlyRate: 0,
       stops: [],
       history: [],
@@ -80,6 +78,7 @@ export function defaultSettings(now: string): Settings {
       policyVersion: LEGAL_POLICY_VERSION,
     },
     production: productionSettingsSchema.parse({}),
+    payroll: payrollSettingsSchema.parse({}),
     updatedAt: now,
   };
 }

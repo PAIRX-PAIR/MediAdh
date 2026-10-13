@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   UserRound,
   Users,
+  Wallet,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
@@ -64,6 +65,7 @@ export const ADMIN_NAV: NavItem[] = [
     badge: (d) => d.requests.filter((r) => r.status === "pendiente").length,
   },
   { href: "/admin/cierres", label: "Cierres", icon: FileClock, group: "Equipo" },
+  { href: "/admin/nomina", label: "Nómina", icon: Wallet, group: "Equipo" },
   { href: "/admin/avisos", label: "Avisos", icon: Megaphone, group: "Equipo" },
   { href: "/admin/ajustes", label: "Ajustes", icon: Settings, group: "Sistema" },
   { href: "/admin/auditoria", label: "Auditoría", icon: ShieldCheck, group: "Sistema" },

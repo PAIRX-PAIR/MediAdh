@@ -63,6 +63,8 @@ async function setup() {
       approvedBy: null,
       approvedAt: now,
       lastLoginAt: null,
+      monthlySalary: null,
+      transportAllowance: false,
     });
   });
   const admin = await principalFor("jefe");

@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { AREAS } from "@/lib/domain/defaults";
-import { REQUEST_STATUSES, REQUEST_TYPES, TASK_PRIORITIES, TASK_STATUSES } from "@/lib/domain/schema";
+import { REQUEST_STATUSES, REQUEST_TYPES, TASK_PRIORITIES, TASK_STATUSES, hhmm, weekScheduleSchema } from "@/lib/domain/schema";
 import { requiredText, text } from "./http";
 
 export const optionalText = (max: number) =>
@@ -198,8 +198,7 @@ const money = z.number().min(0).max(100_000_000_000);
 
 const productionSettingsPatch = z
   .object({
-    workdays: z.array(z.number().int().min(1).max(7)).max(7),
-    saturdayHours: z.union([z.number().min(0).max(24), z.null()]),
+    schedule: weekScheduleSchema,
     skipHolidays: z.boolean(),
     processRates: z
       .object({ torno: money, fresadora: money, cepillo: money, cnc: money, prensa: money, soldadura: money, banco: money })
@@ -208,6 +207,21 @@ const productionSettingsPatch = z
     ivaPct: z.number().min(0).max(100),
     quoteValidDays: z.number().int().min(1).max(365),
     claimWindowDays: z.number().int().min(1).max(60),
+  })
+  .partial();
+
+const payrollSettingsPatch = z
+  .object({
+    monthlyHours: z.number().min(1).max(400),
+    extraDayPct: z.number().min(0).max(300),
+    extraNightPct: z.number().min(0).max(300),
+    sundayHolidayPct: z.number().min(0).max(300),
+    nightStart: hhmm,
+    nightEnd: hhmm,
+    roundingMinutes: z.number().int().min(0).max(60),
+    healthPct: z.number().min(0).max(100),
+    pensionPct: z.number().min(0).max(100),
+    transportAllowance: money,
   })
   .partial();
 
@@ -221,5 +235,34 @@ export const settingsPatchInput = z
     legal: legalPatch,
     publishPolicyVersion: date,
     production: productionSettingsPatch,
+    payroll: payrollSettingsPatch,
+  })
+  .partial();
+
+/* ───────────── Registro de horas y nómina ───────────── */
+
+export const clockInput = z.object({ action: z.enum(["in", "out"]) });
+
+export const attendanceInput = z.object({
+  userId: entityId,
+  date,
+  start: hhmm,
+  end: z.union([hhmm, z.null()]).default(null),
+  note: text(200).default(""),
+});
+
+export const attendancePatchInput = z
+  .object({
+    date,
+    start: hhmm,
+    end: z.union([hhmm, z.null()]),
+    note: text(200),
+  })
+  .partial();
+
+export const payInput = z
+  .object({
+    monthlySalary: z.union([money, z.null()]),
+    transportAllowance: z.boolean(),
   })
   .partial();

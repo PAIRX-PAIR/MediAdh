@@ -70,6 +70,8 @@ async function seedAdmin() {
       approvedBy: null,
       approvedAt: now,
       lastLoginAt: null,
+      monthlySalary: null,
+      transportAllowance: false,
     });
   });
 }
@@ -379,5 +381,36 @@ describe("almacenamiento", () => {
     const raw = new MemoryRawStore();
     await raw.write("0", new Map([["a", "1"]]), "m");
     await expect(raw.write("0", new Map([["a", "2"]]), "m")).rejects.toBeInstanceOf(ConflictError);
+  });
+});
+
+describe("registro de horas y nómina", () => {
+  it("marca entrada y salida con la hora del taller y liquida las extras", async () => {
+    const payroll = await import("./payroll");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-10-13T12:30:00Z")); // martes 7:30 a. m. en Bogotá
+      const p = await principalFor("jefe");
+      const entry = await payroll.clock(p, "in");
+      expect(entry).toMatchObject({ date: "2026-10-13", start: "07:30", end: null, source: "operario" });
+      await expect(payroll.clock(p, "in")).rejects.toMatchObject({ status: 400 });
+
+      vi.setSystemTime(new Date("2026-10-13T23:00:00Z")); // 6:00 p. m.
+      expect(await payroll.clock(p, "out")).toMatchObject({ end: "18:00" });
+      await expect(payroll.createAttendance(p, { userId: "admin-1", date: "2026-10-13", start: "08:00", end: "09:00", note: "" })).rejects.toMatchObject({ status: 400 });
+
+      await payroll.setPay(p, "admin-1", { monthlySalary: 2_100_000 });
+      const report = await payroll.payrollReport(p, null);
+      expect(report.quincena).toMatchObject({ from: "2026-10-01", to: "2026-10-15", payDate: "2026-10-15" });
+      const line = report.lines.find((l) => l.userId === "admin-1")!;
+      // Martes 7:30–12:00 y 13:30–17:00 en el horario; 12:00–13:30 y 17:00–18:00 quedan por fuera: 2,5 h extra diurna.
+      expect(line.hours.extraDay).toBe(2.5);
+      expect(line.amounts.extraDay).toBe(31_250); // 2,5 × 10.000 × 1,25
+      // Workers never see salaries in the sync payload.
+      const sync = JSON.stringify(await buildSync(p));
+      expect(sync).not.toContain("monthlySalary");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -1,7 +1,9 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { defaultPositions, defaultSettings } from "@/lib/domain/defaults";
-import type { Collection, Database, Notification, Position, Task, User } from "@/lib/domain/schema";
+import { minutesOf, shiftsOn } from "@/lib/domain/calendar";
+import { quincenaOf } from "@/lib/domain/payroll";
+import type { Attendance, Collection, Database, Notification, Position, Task, User } from "@/lib/domain/schema";
 import { addDays, todayIn } from "@/lib/domain/time";
 import { hashPassword } from "../auth/password";
 import { docPath, filesFor } from "../store/db";
@@ -59,6 +61,8 @@ export async function seedDemo(raw: RawStore) {
     approvedBy: null,
     approvedAt: iso,
     lastLoginAt: null,
+    monthlySalary: null,
+    transportAllowance: false,
     ...over,
   });
 
@@ -243,6 +247,39 @@ export async function seedDemo(raw: RawStore) {
     }),
   ];
 
+  // Nómina de ejemplo: sueldos ficticios y el registro de horas de esta quincena, con algunas horas extra.
+  settings.payroll.transportAllowance = 200_000;
+  const crew = users.filter((u) => u.kind === "staff" && u.status === "active" && Object.values(PEOPLE).includes(u.displayName));
+  crew.forEach((u, i) => {
+    u.monthlySalary = 1_900_000 + i * 150_000;
+    u.transportAllowance = true;
+  });
+  const attendance: Attendance[] = [];
+  const hhmm = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+  let dayIndex = 0;
+  for (let d = quincenaOf(today).from; d < today; d = addDays(d, 1), dayIndex++) {
+    const shifts = shiftsOn(d, { schedule: settings.production.schedule, skipHolidays: true });
+    crew.forEach((u, i) =>
+      shifts.forEach((shift, k) => {
+        const overtime = k === shifts.length - 1 && (i + dayIndex) % 4 === 0 ? 60 + 30 * (i % 2) : 0;
+        attendance.push({
+          id: randomUUID(),
+          userId: u.id,
+          userName: u.displayName,
+          date: d,
+          start: shift.start,
+          end: hhmm(minutesOf(shift.end) + overtime),
+          note: overtime ? "Terminó un trabajo urgente (ficticio)" : "",
+          source: "operario",
+          createdBy: u.id,
+          createdAt: iso,
+          updatedAt: iso,
+          history: [],
+        });
+      }),
+    );
+  }
+
   const collection = <T,>(items: T[], s = items.length): Collection<T> => ({ schema: 1, seq: s, items });
   const taskDoc = collection(tasks, seq);
   const notificationDoc = collection(notifications, 0);
@@ -274,6 +311,7 @@ export async function seedDemo(raw: RawStore) {
     ...production,
     attachments: collection([], 0),
     ipc: collection([], 0),
+    attendance: collection(attendance, 0),
   };
 
   await raw.write(snapshot.version, filesFor(db), "Datos de demostración");

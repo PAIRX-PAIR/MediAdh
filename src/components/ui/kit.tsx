@@ -371,3 +371,12 @@ export function Meter({ value, tone = "glow", label, className }: { value: numbe
     </div>
   );
 }
+
+/** HH:mm field with a compact fixed width (the base input stretches to its container). */
+export function TimeInput({ className, ...rest }: Omit<React.ComponentProps<typeof Input>, "type">) {
+  return (
+    <span className="inline-block w-40 shrink-0">
+      <Input type="time" className={className} {...rest} />
+    </span>
+  );
+}

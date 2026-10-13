@@ -65,6 +65,18 @@ test.describe("consola del coordinador", () => {
     await expect(page).toHaveTitle("Ajustes · Procesos productivos S.M.I.");
   });
 
+  test("la nómina liquida la quincena con horas extra y el horario tiene 42 h", async ({ page }) => {
+    await page.goto("/admin/nomina");
+    await expect(page.getByText("Neto a pagar").first()).toBeVisible();
+    await page.getByRole("button", { name: "Horas y sueldo" }).first().click();
+    const detail = page.getByRole("dialog");
+    await expect(detail.getByText("Básico (15 días)")).toBeVisible();
+    await expect(detail.getByText(/Extra diurna · /).first()).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.goto("/admin/ajustes#horario");
+    await expect(page.getByText(/Total semanal:\s*42 h/)).toBeVisible();
+  });
+
   test("los títulos de pestaña son los de cada pantalla", async ({ page }) => {
     for (const [path, title] of [
       ["/admin/solicitudes", "Pedidos de material"],
@@ -72,6 +84,7 @@ test.describe("consola del coordinador", () => {
       ["/admin/avisos", "Avisos del taller"],
       ["/admin/auditoria", "Auditoría"],
       ["/admin/clientes", "Clientes"],
+      ["/admin/nomina", "Nómina"],
     ] as const) {
       await page.goto(path);
       await expect(page).toHaveTitle(`${title} · Procesos productivos S.M.I.`);

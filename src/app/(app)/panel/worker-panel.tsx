@@ -6,6 +6,7 @@ import { useSync } from "@/components/providers/sync-provider";
 import { PushCard } from "@/components/pwa/push-card";
 import { PageHeader } from "@/components/ui/kit";
 import { EmptyState, Ring } from "@/components/ui/primitives";
+import { ClockCard } from "@/components/work/clock-card";
 import { TaskCard } from "@/components/work/task-card";
 import { CONTRACT_STATUS_LABEL, PRIORITY_RANK, formatDate, timeAgo } from "@/lib/domain/labels";
 import { daysBetween, dateInZone } from "@/lib/domain/time";
@@ -65,6 +66,8 @@ export function WorkerPanel() {
           <span className="text-xs text-muted">Piezas</span>
         </div>
       </section>
+
+      <ClockCard today={data.today} />
 
       {next ? (
         <section aria-labelledby="sigue-title">

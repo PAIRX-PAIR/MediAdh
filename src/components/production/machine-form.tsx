@@ -26,7 +26,7 @@ export function MachineFormModal({ machine, onClose }: { machine: Machine | null
           hourlyRate: machine.hourlyRate,
           positionId: machine.positionId,
         }
-      : { name: "", process: "torno", description: "", state: "activa", activeSince: data.today, hoursPerDay: 8, hourlyRate: 0, positionId: null },
+      : { name: "", process: "torno", description: "", state: "activa", activeSince: data.today, hoursPerDay: null, hourlyRate: 0, positionId: null },
   );
   const [activateOn, setActivateOn] = useState(data.today);
   const [stopReason, setStopReason] = useState("");
@@ -162,8 +162,8 @@ export function MachineFormModal({ machine, onClose }: { machine: Machine | null
           {!machine && form.state === "activa" && (
             <Field label="Activa desde">{(id) => <Input id={id} type="date" value={form.activeSince ?? ""} onChange={(e) => set("activeSince", e.target.value || null)} />}</Field>
           )}
-          <Field label="Horas productivas por día" hint="Lunes a viernes; el sábado usa el tope del calendario.">
-            {(id, d) => <NumberInput id={id} ariaDescribedBy={d} min={0} max={24} value={form.hoursPerDay} onChange={(v) => set("hoursPerDay", v ?? 0)} suffix="h" />}
+          <Field label="Tope de horas por día (opcional)" hint="Vacío = trabaja todo el horario del taller (Ajustes → Horario).">
+            {(id, d) => <NumberInput id={id} ariaDescribedBy={d} min={0} max={24} value={form.hoursPerDay} onChange={(v) => set("hoursPerDay", v)} placeholder="Horario del taller" suffix="h" />}
           </Field>
           <Field label="Tarifa por hora (costo)" hint="Para calcular el costo real de cada trabajo.">
             {(id, d) => <MoneyInput id={id} ariaDescribedBy={d} value={form.hourlyRate} onChange={(v) => set("hourlyRate", v ?? 0)} allowEmpty={false} />}

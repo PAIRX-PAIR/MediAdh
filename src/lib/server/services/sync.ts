@@ -257,11 +257,11 @@ function buildProduction(
   docs: Pick<Database, "settings" | "orders" | "machines" | "attachments"> & Partial<Pick<Database, "quotes" | "clients" | "ipc">>,
   tasks: Task[],
 ): ProductionPayload {
-  const { workdays, saturdayHours, skipHolidays } = docs.settings.production;
+  const { schedule, skipHolidays } = docs.settings.production;
   const sorted = [...docs.machines.items].sort((a, b) => a.order - b.order);
   // Workers only need what identifies a machine; costs (hourly rate) and change logs stay with admins.
   const machines = principal.isAdmin ? sorted : sorted.map((m) => ({ ...m, hourlyRate: 0, history: [], stops: m.stops.filter((s) => !s.to) }));
-  const base = { calendar: { workdays, saturdayHours, skipHolidays }, machines };
+  const base = { calendar: { schedule, skipHolidays }, machines };
   const viewOf = (a: Attachment): AttachmentView => {
     const { path: _p, ref: _r, ...rest } = a;
     void _p;

@@ -208,6 +208,8 @@ export async function createAccount(
       approvedBy: principal.user.id,
       approvedAt: now,
       lastLoginAt: null,
+      monthlySalary: null,
+      transportAllowance: false,
     };
     docs.users.items.push(user);
     audit(docs.audit, actorOf(principal), "cuenta_creada", user.id, input.kind);

@@ -2,10 +2,12 @@ import { adjustForInflation } from "@/lib/domain/ipc";
 import { CLIENT_KIND_LABEL, CLIENT_TIER_LABEL, PROCESS_LABEL } from "@/lib/domain/labels";
 import { ORDER_STATUS_LABEL, orderMoney } from "@/lib/domain/lifecycle";
 import { formatNit } from "@/lib/domain/nit";
+import { HOUR_KINDS, HOUR_KIND_LABEL } from "@/lib/domain/payroll";
 import { dateInZone } from "@/lib/domain/time";
 import { badRequest } from "@/lib/server/http";
 import { route } from "@/lib/server/route";
 import { getDb } from "@/lib/server/store";
+import { payrollReport } from "@/lib/server/services/payroll";
 
 /**
  * CSV for Excel (es-CO): ";" separator, UTF-8 BOM, and formula-looking cells
@@ -86,6 +88,26 @@ export const GET = route({ access: "admin" }, async ({ req, principal }) => {
         c.archived ? "Sí" : "No",
       ]);
     }
+  } else if (kind === "nomina") {
+    const report = await payrollReport(principal, req.nextUrl.searchParams.get("quincena"));
+    const hours = (n: number) => Math.round(n * 100) / 100;
+    rows = [
+      [`Nómina ${report.quincena.from} a ${report.quincena.to} · pago ${report.quincena.payDate}`],
+      [
+        "Persona", "Sueldo mensual", "Valor hora", "Básico quincena", "Horas trabajadas", "Horas del horario",
+        ...HOUR_KINDS.flatMap((k) => [`${HOUR_KIND_LABEL[k]} (h)`, `${HOUR_KIND_LABEL[k]} ($)`]),
+        "Total extras", "Auxilio de transporte", "Devengado", "Salud", "Pensión", "Neto a pagar", "Registros sin salida",
+      ],
+    ];
+    for (const l of report.lines) {
+      rows.push([
+        l.name, l.monthlySalary, l.hourlyValue, l.basic, hours(l.workedHours), hours(l.scheduledHours),
+        ...HOUR_KINDS.flatMap((k) => [hours(l.hours[k]), l.amounts[k]]),
+        l.extrasTotal, l.transport, l.earned, l.health, l.pension, l.net, l.openEntries,
+      ]);
+    }
+    rows.push([], ["Detalle de registros"], ["Persona", "Fecha", "Entrada", "Salida", "Nota", "Origen"]);
+    for (const e of report.entries) rows.push([e.userName, e.date, e.start, e.end, e.note, e.source === "admin" ? "Coordinador" : "Operario"]);
   } else {
     throw badRequest("Tipo de exportación desconocido.");
   }

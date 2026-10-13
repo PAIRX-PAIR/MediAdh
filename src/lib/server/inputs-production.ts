@@ -55,7 +55,7 @@ export const machineInput = z.object({
   description: longText(300),
   state: z.enum(MACHINE_STATES).default("activa"),
   activeSince: nullableDate.default(null),
-  hoursPerDay: z.number().min(0).max(24).default(8),
+  hoursPerDay: z.number().min(0).max(24).nullable().default(null),
   hourlyRate: money.default(0),
   positionId: nullableId.default(null),
 });
@@ -67,7 +67,7 @@ export const machinePatchInput = z
     description: text(300),
     state: z.enum(MACHINE_STATES),
     activeSince: nullableDate,
-    hoursPerDay: z.number().min(0).max(24),
+    hoursPerDay: z.number().min(0).max(24).nullable(),
     hourlyRate: money,
     positionId: nullableId,
     order: z.number().int().min(0).max(1000),
