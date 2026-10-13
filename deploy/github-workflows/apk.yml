@@ -1,0 +1,86 @@
+# APK de Android (Trusted Web Activity) firmado, generado con Bubblewrap.
+# Requiere estos secretos del repositorio (Settings → Secrets and variables → Actions):
+#   ANDROID_KEYSTORE_BASE64   keystore codificado en base64 (ver docs/APK.md)
+#   ANDROID_KEYSTORE_PASSWORD contraseña del keystore
+#   ANDROID_KEY_PASSWORD      contraseña de la llave (alias "smi")
+# El keystore nunca se sube al repositorio: solo existe como secreto.
+name: APK Android
+
+on:
+  workflow_dispatch:
+    inputs:
+      host:
+        description: "Dominio de la app (sin https), ej. smi-procesos.vercel.app"
+        required: true
+      version_name:
+        description: "Versión visible (ej. 1.0.0)"
+        required: true
+        default: "1.0.0"
+      version_code:
+        description: "Número de versión (entero que siempre sube)"
+        required: true
+        default: "1"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Instalar Bubblewrap
+        run: npm install -g @bubblewrap/cli@1.25.0
+
+      - name: Preparar proyecto TWA
+        env:
+          HOST: ${{ inputs.host }}
+          VERSION_NAME: ${{ inputs.version_name }}
+          VERSION_CODE: ${{ inputs.version_code }}
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$HOST" =~ ^[a-z0-9.-]+\.[a-z]{2,}$ ]]; then echo "Dominio inválido"; exit 1; fi
+          if ! [[ "$VERSION_CODE" =~ ^[0-9]+$ ]]; then echo "version_code debe ser un entero"; exit 1; fi
+          mkdir -p twa
+          sed "s/REEMPLAZAR-CON-EL-DOMINIO.vercel.app/${HOST}/g" android/twa-manifest.json \
+            | jq --arg v "$VERSION_NAME" --argjson c "$VERSION_CODE" '.appVersionName=$v | .appVersionCode=$c' > twa/twa-manifest.json
+          echo "$KEYSTORE_B64" | base64 -d > twa/android.keystore
+          mkdir -p ~/.bubblewrap
+          printf '{"jdkPath":"%s","androidSdkPath":"%s"}' "$JAVA_HOME" "$ANDROID_SDK_ROOT" > ~/.bubblewrap/config.json
+          yes | sdkmanager --licenses > /dev/null || true
+
+      - name: Generar y firmar el APK
+        working-directory: twa
+        env:
+          BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          bubblewrap update --skipVersionUpgrade
+          bubblewrap build --skipPwaValidation
+          ls -la *.apk *.aab
+          # Huella del certificado: debe coincidir con ANDROID_CERT_SHA256 en Vercel (assetlinks.json).
+          keytool -list -v -keystore android.keystore -alias smi -storepass "$BUBBLEWRAP_KEYSTORE_PASSWORD" | grep -E "SHA256:" || true
+          rm -f android.keystore
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: smi-procesos-${{ inputs.version_name }}
+          path: |
+            twa/app-release-signed.apk
+            twa/app-release-bundle.aab
+          retention-days: 90

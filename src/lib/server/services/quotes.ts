@@ -2,7 +2,7 @@ import "server-only";
 import { diffFields } from "@/lib/domain/diff";
 import { QUOTE_STATUS_LABEL } from "@/lib/domain/labels";
 import { formatCop, quoteTotals } from "@/lib/domain/quote";
-import type { Difficulty, Notification, Process, Quote } from "@/lib/domain/schema";
+import type { Difficulty, Notification, Order, Process, Quote } from "@/lib/domain/schema";
 import { isRealDate } from "@/lib/domain/time";
 import type { Principal } from "../auth/principal";
 import { badRequest, conflict, notFound } from "../http";
@@ -73,6 +73,14 @@ function lines(input: Pick<QuoteInput, "materials" | "labor">, previous: Quote |
 function totalsSummary(q: Quote) {
   const t = quoteTotals(q);
   return `${formatCop(t.subtotal)} + IVA = ${formatCop(t.total)}`;
+}
+
+/** A minimal open order carrying one step of load, used only to balance machine choice. */
+function pseudoLoad(machineId: string, process: Process, hours: number): Order {
+  return {
+    status: "recibida",
+    workItems: [{ id: "load", process, machineId, positionId: null, description: "", plannedHours: hours, actualHours: null, status: "pendiente", taskId: null, completedAt: null }],
+  } as unknown as Order;
 }
 
 export async function createQuote(principal: Principal, input: QuoteInput) {
@@ -190,6 +198,8 @@ export async function approveQuote(principal: Principal, id: string, input: Appr
       if (quote.status === "aprobada") throw conflict("Esta cotización ya tiene orden de trabajo.");
       if (quote.status === "rechazada") throw conflict("La cotización fue rechazada. Vuélvela a borrador si el cliente cambió de opinión.");
       const totals = quoteTotals(quote);
+      // Lines assigned so far count as load, so several lines of one process spread over its machines.
+      const assigned: Order[] = [...docs.orders.items];
       const { order, notifications } = createOrderIn(
         docs,
         principal,
@@ -207,7 +217,8 @@ export async function approveQuote(principal: Principal, id: string, input: Appr
             .filter((l) => l.hours > 0)
             .map((l) => {
               const chosen = input.machines[l.id];
-              const machineId = chosen !== undefined ? chosen : (leastLoadedMachine(docs.machines.items, docs.orders.items, l.process)?.id ?? null);
+              const machineId = chosen !== undefined ? chosen : (leastLoadedMachine(docs.machines.items, assigned, l.process)?.id ?? null);
+              if (machineId) assigned.push(pseudoLoad(machineId, l.process, l.hours));
               return { process: l.process, machineId, description: l.description, plannedHours: l.hours };
             }),
           supplies: quote.materials.map((m) => ({ description: m.description, supplier: "", quantity: m.quantity, unitCost: m.unitCost })),

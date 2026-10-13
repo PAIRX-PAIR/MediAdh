@@ -97,7 +97,14 @@ function TopBar({ onBell, onMenu }: { onBell: () => void; onMenu: () => void }) 
         <Link href={data.me.isAdmin ? "/admin" : "/panel"} className="flex min-w-0 items-center gap-2.5" aria-label="Inicio">
           <BrandMark className="size-9 shrink-0" />
           <div className="min-w-0 leading-tight">
-            <p className="truncate font-display text-[15px] font-bold tracking-wide text-ink">{data.settings.workshopName}</p>
+            <p className="truncate font-display text-[15px] font-bold tracking-wide text-ink">
+              {/* Phones get the short name so it is never cut in the middle. */}
+              <span className="sm:hidden">
+                {data.settings.legal.tradeName || "S.M.I."}
+                {data.demo ? " · Demo" : ""}
+              </span>
+              <span className="hidden sm:inline">{data.settings.workshopName}</span>
+            </p>
             <p className="truncate text-xs text-muted">
               {data.me.displayName}
               {data.me.positionTitle ? ` · ${data.me.positionTitle}` : data.me.isAdmin ? " · Administración" : ""}

@@ -20,7 +20,7 @@ import type {
   TaskPriority,
   WorkItem,
 } from "@/lib/domain/schema";
-import { addDays, daysBetween, isRealDate } from "@/lib/domain/time";
+import { addDays, daysBetween, isRealDate, zonedInstant } from "@/lib/domain/time";
 import type { Principal } from "../auth/principal";
 import { badRequest, conflict, forbidden, notFound } from "../http";
 import { getDb } from "../store";
@@ -370,7 +370,12 @@ export async function updateOrder(principal: Principal, id: string, patch: Parti
       const moved = JSON.stringify(patch.due) !== JSON.stringify(order.due);
       order.due = patch.due;
       // A new date re-arms the reminders.
-      if (moved) order.reminders = { before24h: false, dayOf: false, overdue: false };
+      if (moved) {
+        const due = order.due ? zonedInstant(order.due.date, order.due.time, principal.settings.timezone).getTime() : null;
+        const future = due !== null && due > Date.now();
+        // A date moved into the future re-arms every reminder; one still in the past must not repeat "VENCIDA".
+        order.reminders = future ? { before24h: false, dayOf: false, overdue: false } : { ...order.reminders, before24h: true, dayOf: true };
+      }
     }
     if (patch.price !== undefined) order.price = patch.price;
     if (patch.notes !== undefined) order.notes = patch.notes;

@@ -3,7 +3,8 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { AccessDialog } from "@/components/access/access-dialog";
 import { HeroStage } from "@/components/landing/hero-stage";
-import { Reveal, StoryRail } from "@/components/landing/story";
+import { Journey } from "@/components/landing/journey";
+import { Reveal, StoryScroll } from "@/components/landing/story";
 import { BrandMark } from "@/components/shell/brand-mark";
 import { DEFAULT_MACHINES } from "@/lib/domain/defaults";
 import { PROCESS_LABEL } from "@/lib/domain/labels";
@@ -15,6 +16,7 @@ export const metadata = { title: { absolute: "Procesos productivos S.M.I." } };
 const STEPS = [
   {
     id: "recibe",
+    station: "Torno",
     kicker: "01 · Ingreso",
     title: "Cada pieza entra con folio, fotos y estado",
     body: "Al llegar el trabajo se registra el cliente, la cantidad, cómo llegó y las fotos o planos. Nace la orden de trabajo con su número consecutivo.",
@@ -22,6 +24,7 @@ const STEPS = [
   },
   {
     id: "cotiza",
+    station: "Engranajes",
     kicker: "02 · Cotización",
     title: "Cotiza con materiales, horas y dificultad",
     body: "Torno, fresadora, CNC, prensa, soldadura y banco con su tarifa. Recargo por dificultad, utilidad e IVA. Si el cliente aprueba, se vuelve orden de trabajo.",
@@ -29,6 +32,7 @@ const STEPS = [
   },
   {
     id: "programa",
+    station: "CNC¹ Leadwell",
     kicker: "03 · Programación",
     title: "La cola de cada máquina, a la vista",
     body: "Ocupación en verde, ámbar o rojo, fecha libre más cercana y una recomendación explicada de qué trabajo sigue. Antes de prometer, pregunta: ¿me puedo comprometer?",
@@ -36,6 +40,7 @@ const STEPS = [
   },
   {
     id: "produce",
+    station: "Soldadura",
     kicker: "04 · Producción",
     title: "Cada operario, su trabajo en el celular",
     body: "Las tareas llegan al puesto, no a la persona. Avisos con sonido, pedir material en tres toques y cierre del día. Si cambia el contrato, el puesto conserva su trabajo.",
@@ -43,6 +48,7 @@ const STEPS = [
   },
   {
     id: "entrega",
+    station: "Planta",
     kicker: "05 · Entrega",
     title: "Recordatorios, garantías y aviso de facturar",
     body: "Avisos 24 horas antes, el mismo día y al vencer. Tres días después de entregar sin reclamos, el servicio se cierra solo y aparece FACTURAR.",
@@ -50,6 +56,7 @@ const STEPS = [
   },
   {
     id: "mide",
+    station: "Vista general",
     kicker: "06 · Gestión",
     title: "Mide la gestión de producción",
     body: "Cumplimiento, satisfacción, garantías, devoluciones y uso de cada máquina, mes a mes. Las máquinas nuevas suman desde el día en que se activan.",
@@ -87,8 +94,8 @@ export default async function Home() {
 
       <main id="contenido">
         {/* Hero: text and buttons are server HTML (fast first paint); the 3D stage loads after. */}
+        <Journey poster={<HeroStage />}>
         <section className="relative isolate flex min-h-svh flex-col justify-end overflow-hidden pb-16 pt-28 sm:justify-center sm:pb-24" aria-labelledby="hero-title">
-          <HeroStage />
           <div className="relative z-10 mx-auto w-full max-w-7xl px-4 sm:px-6">
             <p className="hud-label mb-3 text-glow-soft">{company}</p>
             <h1 id="hero-title" className="max-w-3xl text-balance font-display text-5xl font-bold leading-[0.95] tracking-tight text-ink sm:text-7xl">
@@ -123,12 +130,14 @@ export default async function Home() {
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-32 bg-gradient-to-b from-transparent to-abyss" aria-hidden />
         </section>
 
-        <StoryRail steps={STEPS.map(({ id, kicker, title, body }) => ({ id, kicker, title, body }))}>
-          {STEPS.map((s) => {
+        <StoryScroll
+          steps={STEPS.map(({ id, kicker, station, title, body }) => ({ id, kicker, station, title, body }))}
+          icons={STEPS.map((s) => {
             const Icon = s.icon;
             return <Icon key={s.id} className="size-6" aria-hidden />;
           })}
-        </StoryRail>
+        />
+        </Journey>
 
         <section className="mx-auto max-w-7xl px-4 py-24 sm:px-6" aria-labelledby="maquinas-title">
           <Reveal>

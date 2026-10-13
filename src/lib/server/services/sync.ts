@@ -12,6 +12,7 @@ const QUOTE_WINDOW_DAYS = 90;
 import type { Principal } from "../auth/principal";
 import { isDemoMode, vapidConfig } from "../env";
 import { getDb } from "../store";
+import { bootstrapAdminConfig } from "./auth";
 import { DEMO_CREDENTIALS } from "./demo";
 import { isVisibleTo } from "./visibility";
 
@@ -257,7 +258,10 @@ function buildProduction(
   tasks: Task[],
 ): ProductionPayload {
   const { workdays, saturdayHours, skipHolidays } = docs.settings.production;
-  const base = { calendar: { workdays, saturdayHours, skipHolidays }, machines: [...docs.machines.items].sort((a, b) => a.order - b.order) };
+  const sorted = [...docs.machines.items].sort((a, b) => a.order - b.order);
+  // Workers only need what identifies a machine; costs (hourly rate) and change logs stay with admins.
+  const machines = principal.isAdmin ? sorted : sorted.map((m) => ({ ...m, hourlyRate: 0, history: [], stops: m.stops.filter((s) => !s.to) }));
+  const base = { calendar: { workdays, saturdayHours, skipHolidays }, machines };
   const viewOf = (a: Attachment): AttachmentView => {
     const { path: _p, ref: _r, ...rest } = a;
     void _p;
@@ -367,6 +371,6 @@ export async function buildPublicInfo(): Promise<PublicInfo> {
     positions: [...positions.items].sort((a, b) => a.order - b.order).map((p) => ({ id: p.id, title: p.title, area: p.area })),
     legal: settings.legal,
     demo: isDemoMode() ? DEMO_CREDENTIALS : null,
-    needsSetup: !users.items.some((u) => u.kind === "admin"),
+    needsSetup: !bootstrapAdminConfig() && !users.items.some((u) => u.kind === "admin"),
   };
 }

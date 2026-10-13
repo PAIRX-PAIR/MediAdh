@@ -22,6 +22,58 @@ function lockMinutes(failures: number): number {
   return LOCK_STEPS.find((s) => failures >= s.failures)?.minutes ?? 0;
 }
 
+/** Admin account declared in the environment: username + scrypt hash (never the password itself). */
+export function bootstrapAdminConfig(): { username: string; hash: string; name: string } | null {
+  const username = normalizeUsername(process.env.ADMIN_BOOTSTRAP_USERNAME ?? "");
+  const hash = process.env.ADMIN_BOOTSTRAP_PASSWORD_HASH?.trim() ?? "";
+  if (!username || !USERNAME_PATTERN.test(username) || !/^scrypt\$\d+\$\d+\$\d+\$[A-Za-z0-9+/=]+\$[A-Za-z0-9+/=]+$/.test(hash)) return null;
+  return { username, hash, name: process.env.ADMIN_BOOTSTRAP_NAME?.trim() || username };
+}
+
+/**
+ * Creates the environment-declared admin the first time someone signs in with
+ * that username. The password is verified afterwards by the normal login, and
+ * the person still accepts the data policy on first use. Remove the variables
+ * once the account exists (like SETUP_KEY).
+ */
+export async function ensureBootstrapAdmin(username: string) {
+  const cfg = bootstrapAdminConfig();
+  if (!cfg || cfg.username !== username) return;
+  const db = getDb();
+  const { users, settings } = await db.read(["users", "settings"]);
+  if (users.items.some((u) => u.username === cfg.username) || settings.bootstrapAdmins.includes(cfg.username)) return;
+  await db.transact(["users", "settings", "audit"], "Crea el administrador declarado en el entorno", ({ users: draft, settings: conf, audit: log }) => {
+    if (draft.items.some((u) => u.username === cfg.username) || conf.bootstrapAdmins.includes(cfg.username)) return;
+    conf.bootstrapAdmins.push(cfg.username);
+    const now = nowIso();
+    const user: User = {
+      id: newId(),
+      username: cfg.username,
+      displayName: cfg.name,
+      passwordHash: cfg.hash,
+      kind: "admin",
+      status: "active",
+      phone: null,
+      requestedPositionId: null,
+      registrationNote: null,
+      rejectionReason: null,
+      consentAt: null,
+      consentVersion: null,
+      mustChangePassword: false,
+      sessionVersion: 0,
+      failedLogins: 0,
+      lockedUntil: null,
+      createdAt: now,
+      updatedAt: now,
+      approvedBy: null,
+      approvedAt: now,
+      lastLoginAt: null,
+    };
+    draft.items.push(user);
+    audit(log, { id: null, name: "Sistema" }, "admin_entorno_creado", user.id, cfg.username);
+  });
+}
+
 export interface LoginResult {
   token: string;
   user: User;
@@ -35,6 +87,7 @@ export async function login(input: { username: string; password: string }, ip: s
   const byPair = consume(`login:pair:${ip}:${username}`, 8, 15 * 60_000);
   if (!byIp.ok || !byPair.ok) throw tooMany(Math.max(byIp.retryAfterSeconds, byPair.retryAfterSeconds));
 
+  await ensureBootstrapAdmin(username);
   const db = getDb();
   const { users } = await db.read(["users"]);
   const user = users.items.find((u) => u.username === username);
@@ -276,5 +329,5 @@ export async function setupFirstAdmin(
 
 export async function setupStatus() {
   const { users } = await getDb().read(["users"]);
-  return { needsSetup: !users.items.some((u) => u.kind === "admin"), setupEnabled: Boolean(process.env.SETUP_KEY) };
+  return { needsSetup: !bootstrapAdminConfig() && !users.items.some((u) => u.kind === "admin"), setupEnabled: Boolean(process.env.SETUP_KEY) };
 }

@@ -588,6 +588,8 @@ export const settingsSchema = z.object({
   /** Optional shared code required to self-register (stored as a scrypt hash). */
   registrationCodeHash: z.string().nullable().default(null),
   maxPendingRegistrations: z.number().int().min(1).max(200).default(25),
+  /** Usernames already created from ADMIN_BOOTSTRAP_* (never recreated after a deletion). */
+  bootstrapAdmins: z.array(z.string()).default([]),
   legal: legalInfoSchema,
   production: productionSettingsSchema.default(productionSettingsSchema.parse({})),
   updatedAt: isoDateTime,

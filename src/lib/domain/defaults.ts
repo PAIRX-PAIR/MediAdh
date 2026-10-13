@@ -64,6 +64,7 @@ export function defaultSettings(now: string): Settings {
     timezone: process.env.TALLER_TIMEZONE?.trim() || DEFAULT_TIMEZONE,
     registrationOpen: true,
     registrationCodeHash: null,
+    bootstrapAdmins: [],
     maxPendingRegistrations: 25,
     legal: {
       companyName: "",

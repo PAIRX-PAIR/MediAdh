@@ -13,6 +13,17 @@ import type { PublicInfo } from "@/lib/domain/views";
 
 type Tab = "entrar" | "registro";
 
+/** Only a path on this same site ("/admin?x=1"); anything that resolves elsewhere (//, /, schemes) is dropped. */
+export function safeReturnPath(value: string | null): string | null {
+  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return null;
+  try {
+    const url = new URL(value, window.location.origin);
+    return url.origin === window.location.origin ? url.pathname + url.search + url.hash : null;
+  } catch {
+    return null;
+  }
+}
+
 const REASONS: Record<string, string> = {
   pending: "Tu solicitud está pendiente. El coordinador debe aprobarla y asignarte un puesto.",
   rejected: "Tu solicitud de acceso no fue aprobada. Habla con el coordinador.",
@@ -129,7 +140,7 @@ function LoginForm({ info }: { info: PublicInfo }) {
       const session = await api.session();
       const back = params.get("volver");
       // Only same-site paths are followed (no open redirect).
-      const safeBack = back && back.startsWith("/") && !back.startsWith("//") ? back : null;
+      const safeBack = safeReturnPath(back);
       const home = session.status === "ok" && session.user.isAdmin ? "/admin" : "/panel";
       router.replace(safeBack ?? home);
       router.refresh();

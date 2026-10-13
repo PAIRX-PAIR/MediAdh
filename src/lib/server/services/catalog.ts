@@ -207,7 +207,8 @@ export async function updateMachine(principal: Principal, id: string, patch: Mac
         throw conflict(`Hay ${pending.length} paso(s) de trabajo pendientes en esta máquina. Reasígnalos antes de dejarla inactiva.`, "machine_busy");
       }
       if (to === "activa" && from === "inactiva") {
-        machine.activeSince = patch.activeSince ?? principal.today;
+        // Keep the original service start so past capacity and indicators survive a pause.
+        machine.activeSince = patch.activeSince ?? machine.activeSince ?? principal.today;
       }
       if (to === "mantenimiento") {
         if (from === "inactiva") throw badRequest("Activa la máquina antes de ponerla en mantenimiento.");

@@ -109,6 +109,8 @@ export async function maybeRunScheduler(): Promise<Notification[]> {
     return (await run).notifications;
   } catch (error) {
     console.warn("[smi] scheduler", (error as Error).message);
+    // Retry within ~30 s instead of silencing reminders for the whole window.
+    globalForScheduler.__smiSchedulerAt = now - OPPORTUNISTIC_EVERY_MS + 30_000;
     return [];
   } finally {
     globalForScheduler.__smiSchedulerRun = null;

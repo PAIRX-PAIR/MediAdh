@@ -137,6 +137,9 @@ describe("orden de trabajo → tareas por puesto", () => {
     expect(syncT1.production.briefs?.[0]).toMatchObject({ folio: "OT-0001", due: { date: "2099-01-10" } });
     expect(syncT1.production.orders).toBeUndefined();
     expect(syncT1.production.clients).toBeUndefined();
+    // Costs never reach workers.
+    expect(syncT1.production.settings).toBeUndefined();
+    expect(syncT1.production.machines.every((m) => m.hourlyRate === 0 && m.history.length === 0)).toBe(true);
     expect((await buildSync(f1)).tasks[0]!.machineId).toBe("fresadora");
   });
 

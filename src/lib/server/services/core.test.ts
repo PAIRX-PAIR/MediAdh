@@ -93,6 +93,31 @@ beforeEach(async () => {
   await seedAdmin();
 });
 
+describe("administrador declarado en el entorno", () => {
+  it("se crea al primer inicio de sesión con el hash del entorno y luego pide aceptar la política", async () => {
+    process.env.ADMIN_BOOTSTRAP_USERNAME = "judago";
+    process.env.ADMIN_BOOTSTRAP_NAME = "Judago";
+    process.env.ADMIN_BOOTSTRAP_PASSWORD_HASH = "scrypt$131072$8$1$c2FsdA==$a2V5";
+    try {
+      // The test double accepts "test$<password>"; with a scrypt-shaped hash the password check fails generically.
+      await expect(login({ username: "judago", password: "x" }, ip())).rejects.toMatchObject({ status: 401 });
+      const { users } = await db.read(["users"]);
+      const admin = users.items.find((u) => u.username === "judago")!;
+      expect(admin).toMatchObject({ kind: "admin", status: "active", displayName: "Judago", consentAt: null });
+      // Idempotent: a second attempt does not duplicate the account.
+      await expect(login({ username: "judago", password: "x" }, ip())).rejects.toMatchObject({ status: 401 });
+      expect((await db.read(["users"])).users.items.filter((u) => u.username === "judago")).toHaveLength(1);
+      // Other usernames are untouched.
+      await expect(login({ username: "otro", password: "x" }, ip())).rejects.toMatchObject({ status: 401 });
+      expect((await db.read(["users"])).users.items.some((u) => u.username === "otro")).toBe(false);
+    } finally {
+      delete process.env.ADMIN_BOOTSTRAP_USERNAME;
+      delete process.env.ADMIN_BOOTSTRAP_NAME;
+      delete process.env.ADMIN_BOOTSTRAP_PASSWORD_HASH;
+    }
+  });
+});
+
 describe("registro con aprobación", () => {
   it("crea la cuenta pendiente y avisa a los admins; no puede entrar hasta ser aprobada", async () => {
     const { notifications } = await register(registration(), ip());
