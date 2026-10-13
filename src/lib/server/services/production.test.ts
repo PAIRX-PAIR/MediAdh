@@ -489,6 +489,10 @@ describe("ganancias del mes", () => {
     await orders.orderAction(admin, order.id, { action: "deliver", satisfaction: null, finalPrice: null });
     const { users } = await db.read(["users"]);
     await payroll.setPay(admin, users.items.find((u) => u.username === "tornero1")!.id, { monthlySalary: 2_100_000 });
+    // A contract that covers the whole month (setup signs it today).
+    await db.transact(["positions"], "contrato desde antes", ({ positions }) => {
+      positions.items.find((p) => p.id === "tornero-1")!.contract!.startDate = "2020-01-01";
+    });
 
     const report = await finance.financeReport(admin, null);
     expect(report).toMatchObject({ sales: 2_000_000, supplies: 300_000 });

@@ -419,3 +419,21 @@ describe("registro de horas y nómina", () => {
     }
   });
 });
+
+describe("salida olvidada", () => {
+  it("una entrada sin salida de otro día no bloquea la salida de hoy", async () => {
+    const payroll = await import("./payroll");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-10-13T12:30:00Z")); // martes 7:30 a. m.
+      await payroll.clock(await principalFor("jefe"), "in"); // y nunca marca salida
+      vi.setSystemTime(new Date("2026-10-14T12:30:00Z")); // miércoles 7:30 a. m.
+      const p = await principalFor("jefe");
+      await payroll.clock(p, "in");
+      vi.setSystemTime(new Date("2026-10-14T22:00:00Z")); // 5:00 p. m.
+      expect(await payroll.clock(p, "out")).toMatchObject({ date: "2026-10-14", end: "17:00" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

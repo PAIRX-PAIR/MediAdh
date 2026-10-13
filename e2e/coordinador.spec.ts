@@ -70,7 +70,7 @@ test.describe("consola del coordinador", () => {
     await expect(page.getByText("Neto a pagar").first()).toBeVisible();
     await page.getByRole("button", { name: "Horas y sueldo" }).first().click();
     const detail = page.getByRole("dialog");
-    await expect(detail.getByText("Básico (15 días)")).toBeVisible();
+    await expect(detail.getByText(/Básico \(\d+ días\)/)).toBeVisible();
     await expect(detail.getByText(/Extra diurna · /).first()).toBeVisible();
     await page.keyboard.press("Escape");
     await page.goto("/admin/ajustes#horario");

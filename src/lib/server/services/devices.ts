@@ -58,9 +58,13 @@ export async function clearDeviceCookie() {
   store.set(DEVICE_COOKIE, "", { httpOnly: true, secure: isProduction, sameSite: "lax", path: "/", maxAge: 0 });
 }
 
-/** Drops expired requests so the document stays small. */
+/** Drops expired requests and long-revoked phones so the document stays small. */
 function prune(items: Device[], now: number): Device[] {
-  return items.filter((d) => d.status !== "pendiente" || Date.parse(d.expiresAt) > now - 86_400_000);
+  return items.filter((d) => {
+    if (d.status === "pendiente") return Date.parse(d.expiresAt) > now - 86_400_000;
+    if (d.status === "revocado") return Date.parse(d.revokedAt ?? d.createdAt) > now - 90 * 86_400_000;
+    return true;
+  });
 }
 
 export type DeviceState =
@@ -70,26 +74,26 @@ export type DeviceState =
   | { status: "revocado" }
   | { status: "aprobado"; operator: string };
 
-async function currentDevice(): Promise<Device | null> {
+/** This phone's record and state, from one read of devices and users. */
+async function resolveDevice(): Promise<{ device: Device | null; state: DeviceState }> {
   const secret = await readDeviceSecret();
-  if (!secret) return null;
-  const { devices } = await getDb().read(["devices"]);
+  if (!secret) return { device: null, state: { status: "ninguno" } };
+  const { devices, users } = await getDb().read(["devices", "users"]);
   const hash = hashSecret(secret);
-  return devices.items.find((d) => d.secretHash === hash) ?? null;
+  const device = devices.items.find((d) => d.secretHash === hash) ?? null;
+  if (!device) return { device, state: { status: "ninguno" } };
+  if (device.status === "revocado") return { device, state: { status: "revocado" } };
+  if (device.status === "aprobado") {
+    const user = users.items.find((u) => u.id === device.userId);
+    if (!user || user.status !== "active") return { device, state: { status: "revocado" } };
+    return { device, state: { status: "aprobado", operator: user.displayName } };
+  }
+  if (Date.parse(device.expiresAt) <= Date.now()) return { device, state: { status: "vencido" } };
+  return { device, state: { status: "pendiente", code: device.code, expiresAt: device.expiresAt } };
 }
 
 export async function deviceState(): Promise<DeviceState> {
-  const device = await currentDevice();
-  if (!device) return { status: "ninguno" };
-  if (device.status === "revocado") return { status: "revocado" };
-  if (device.status === "aprobado") {
-    const { users } = await getDb().read(["users"]);
-    const user = users.items.find((u) => u.id === device.userId);
-    if (!user || user.status !== "active") return { status: "revocado" };
-    return { status: "aprobado", operator: user.displayName };
-  }
-  if (Date.parse(device.expiresAt) <= Date.now()) return { status: "vencido" };
-  return { status: "pendiente", code: device.code, expiresAt: device.expiresAt };
+  return (await resolveDevice()).state;
 }
 
 /** The phone asks for access: a new pending request (or the current one while it is still valid). */
@@ -124,15 +128,14 @@ export async function requestDevice(userAgent: string | null): Promise<DeviceSta
 
 /** Board of the operator this phone belongs to. */
 export async function deviceBoard(): Promise<Board> {
-  const state = await deviceState();
-  if (state.status !== "aprobado") throw new HttpError(403, "Este celular no tiene acceso. Pide acceso de nuevo.", "device_not_approved");
-  const device = (await currentDevice())!;
-  return boardForOperator(device.userId!);
+  const { device, state } = await resolveDevice();
+  if (state.status !== "aprobado" || !device?.userId) throw new HttpError(403, "Este celular no tiene acceso. Pide acceso de nuevo.", "device_not_approved");
+  return boardForOperator(device.userId);
 }
 
 /** "Salir" on the phone: forgets the device here and revokes it. */
 export async function forgetDevice() {
-  const device = await currentDevice();
+  const { device } = await resolveDevice();
   if (device) {
     await getDb().transact(["devices"], "Un celular deja de usar el tablero", ({ devices }) => {
       const d = devices.items.find((x) => x.id === device.id);

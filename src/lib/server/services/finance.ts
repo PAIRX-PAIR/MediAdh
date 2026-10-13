@@ -42,9 +42,12 @@ export async function financeReport(principal: Principal, monthParam: string | n
   const people = payrollPeopleFor(docs, entries, principal.today);
   const lines1 = liquidate({ people, entries, quincena: q1, calendar, settings: docs.settings.payroll });
   const lines2 = liquidate({ people, entries, quincena: q2, calendar, settings: docs.settings.payroll });
+  const employerPct = docs.settings.finance.employerCostPct / 100;
   const payroll = people.map((p, i) => {
     const a = lines1[i]!;
     const b = lines2[i]!;
+    // Employer contributions and benefits apply to salary + overtime, not to the transport allowance.
+    const employer = Math.round((a.earned - a.transport + b.earned - b.transport) * employerPct);
     return {
       userId: p.id,
       name: p.displayName,
@@ -54,13 +57,15 @@ export async function financeReport(principal: Principal, monthParam: string | n
       q2: { net: b.net, earned: b.earned, extras: b.extrasTotal },
       /** What reaches the person's account in the month. */
       net: a.net + b.net,
-      /** What the workshop pays for that person (devengado: salary, overtime, transport). */
-      cost: a.earned + b.earned,
+      employer,
+      /** What the workshop pays for that person: devengado plus employer cost. */
+      cost: a.earned + b.earned + employer,
     };
   });
   const payrollQ1 = payroll.reduce((s, p) => s + p.q1.earned, 0);
   const payrollQ2 = payroll.reduce((s, p) => s + p.q2.earned, 0);
-  const profit = sales - supplies - payrollQ1 - payrollQ2;
+  const employerCost = payroll.reduce((s, p) => s + p.employer, 0);
+  const profit = sales - supplies - payrollQ1 - payrollQ2 - employerCost;
   const goals = docs.settings.finance;
   const basisValue = goals.goalBasis === "ventas" ? sales : profit;
 
@@ -74,6 +79,8 @@ export async function financeReport(principal: Principal, monthParam: string | n
     supplies,
     payrollQ1,
     payrollQ2,
+    employerCost,
+    employerCostPct: docs.settings.finance.employerCostPct,
     profit,
     orders: delivered,
     withoutPrice,

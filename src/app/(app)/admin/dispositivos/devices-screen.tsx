@@ -8,6 +8,7 @@ import { Modal, useConfirm } from "@/components/ui/overlay";
 import { Button, Chip, EmptyState, Field, IconButton, Input, Panel, Select, Spinner } from "@/components/ui/primitives";
 import { request } from "@/lib/client/api";
 import { useAction } from "@/lib/client/use-action";
+import { formatDeviceCode } from "@/lib/domain/device-code";
 import { formatDateTime } from "@/lib/domain/labels";
 
 interface DeviceList {
@@ -53,7 +54,7 @@ export function DevicesScreen() {
   }, [version]);
 
   const reload = () => setVersion((v) => v + 1);
-  const pretty = code.length > 4 ? `${code.slice(0, 4)}-${code.slice(4)}` : code;
+  const pretty = formatDeviceCode(code);
 
   return (
     <div className="flex flex-col gap-5">
@@ -137,7 +138,7 @@ export function DevicesScreen() {
                   </p>
                   {d.status === "pendiente" && d.code && (
                     <Button size="sm" variant="secondary" className="mt-2" onClick={() => setCode(d.code!)}>
-                      Usar código {d.code.slice(0, 4)}-{d.code.slice(4)}
+                      Usar código {formatDeviceCode(d.code)}
                     </Button>
                   )}
                 </div>

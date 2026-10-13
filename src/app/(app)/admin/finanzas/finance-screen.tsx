@@ -3,7 +3,7 @@
 import { AlertTriangle, ChevronLeft, ChevronRight, Flag, Plus, Save, Target, Trash2, Trophy } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { MoneyInput, PageHeader, StatTile } from "@/components/ui/kit";
+import { MoneyInput, NumberInput, PageHeader, StatTile } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/overlay";
 import { Button, Chip, EmptyState, Field, IconButton, Input, Panel, Select, Spinner, cn } from "@/components/ui/primitives";
 import { request } from "@/lib/client/api";
@@ -23,6 +23,8 @@ interface FinanceReport {
   supplies: number;
   payrollQ1: number;
   payrollQ2: number;
+  employerCost: number;
+  employerCostPct: number;
   profit: number;
   orders: Array<{ id: string; folio: string; clientName: string; title: string; deliveredOn: string; price: number; supplies: number; invoiced: boolean }>;
   withoutPrice: number;
@@ -36,7 +38,7 @@ interface FinanceReport {
     net: number;
     cost: number;
   }>;
-  goals: { goals: Goal[]; goalBasis: "ventas" | "ganancia"; value: number; progress: GoalProgress };
+  goals: { goals: Goal[]; goalBasis: "ventas" | "ganancia"; employerCostPct: number; value: number; progress: GoalProgress };
 }
 
 const monthLabel = (month: string) => formatDate(`${month}-15`, { month: "long", year: "numeric" });
@@ -72,7 +74,7 @@ export function FinanceScreen() {
   }
 
   const go = (m: string) => router.replace(`${pathname}?mes=${m}`, { scroll: false });
-  const payroll = report.payrollQ1 + report.payrollQ2;
+  const payroll = report.payrollQ1 + report.payrollQ2 + report.employerCost;
   const { q1, q2 } = report.quincenas;
 
   return (
@@ -101,7 +103,7 @@ export function FinanceScreen() {
       <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
         <StatTile label="Ventas del mes" value={formatCop(report.sales)} hint={`${report.orders.length} trabajo(s) entregado(s)`} tone="glow" />
         <StatTile label="Insumos" value={formatCop(report.supplies)} />
-        <StatTile label="Nómina (2 quincenas)" value={formatCop(payroll)} />
+        <StatTile label="Nómina (2 quincenas)" value={formatCop(payroll)} hint={report.employerCostPct > 0 ? `incluye carga prestacional ${report.employerCostPct} %` : "sin carga prestacional"} />
         <StatTile label="Ganancia" value={formatCop(report.profit)} tone={report.profit >= 0 ? "done" : "blocked"} />
       </div>
 
@@ -129,12 +131,17 @@ export function FinanceScreen() {
           <Row label="− Insumos de esos trabajos" value={`− ${formatCop(report.supplies)}`} />
           <Row label={`− Quincena 1 (${formatDate(q1.from, { day: "numeric" })}–${formatDate(q1.to, { day: "numeric", month: "short" })})`} value={`− ${formatCop(report.payrollQ1)}`} />
           <Row label={`− Quincena 2 (${formatDate(q2.from, { day: "numeric" })}–${formatDate(q2.to, { day: "numeric", month: "short" })})`} value={`− ${formatCop(report.payrollQ2)}`} />
+          <Row label={`− Carga prestacional (${report.employerCostPct} %)`} value={`− ${formatCop(report.employerCost)}`} />
           <div className="mt-1 flex items-baseline justify-between border-t border-line pt-2">
             <dt className="font-display font-semibold text-ink">Queda para el taller</dt>
             <dd className={cn("font-display text-2xl font-bold", report.profit >= 0 ? "text-done" : "text-blocked")}>{formatCop(report.profit)}</dd>
           </div>
         </dl>
-        <p className="mt-2 text-xs text-muted">La nómina cuenta lo devengado (sueldo, horas extra y auxilio); salud y pensión del trabajador ya van dentro.</p>
+        <p className="mt-2 text-xs text-muted">
+          Las quincenas cuentan lo devengado (sueldo, horas extra y auxilio). La carga prestacional es lo que la empresa paga además (seguridad social del empleador, ARL, caja,
+          prima, cesantías y vacaciones).{" "}
+          {report.employerCostPct === 0 && <strong className="text-pending">Está en 0 %: pide el porcentaje a tu contador y ponlo en «Editar metas».</strong>}
+        </p>
       </Panel>
 
       <Panel>
@@ -218,6 +225,7 @@ export function FinanceScreen() {
         <GoalsModal
           goals={report.goals.goals}
           basis={report.goals.goalBasis}
+          employerCostPct={report.goals.employerCostPct}
           onClose={() => setEditingGoals(false)}
           onSaved={() => setVersion((v) => v + 1)}
         />
@@ -295,15 +303,28 @@ function GoalsPanel({ report, onEdit }: { report: FinanceReport; onEdit: () => v
   );
 }
 
-function GoalsModal({ goals, basis, onClose, onSaved }: { goals: Goal[]; basis: "ventas" | "ganancia"; onClose: () => void; onSaved: () => void }) {
+function GoalsModal({
+  goals,
+  basis,
+  employerCostPct,
+  onClose,
+  onSaved,
+}: {
+  goals: Goal[];
+  basis: "ventas" | "ganancia";
+  employerCostPct: number;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   const [rows, setRows] = useState(goals);
   const [goalBasis, setGoalBasis] = useState(basis);
+  const [employer, setEmployer] = useState<number | null>(employerCostPct);
   const { run, busy } = useAction();
   return (
     <Modal
       open
       onClose={onClose}
-      title="Metas del mes"
+      title="Metas y costos del mes"
       description="En pesos, antes de IVA. Se comparan con las ventas o con la ganancia del mes."
       size="md"
       footer={
@@ -311,7 +332,7 @@ function GoalsModal({ goals, basis, onClose, onSaved }: { goals: Goal[]; basis: 
           loading={busy === "g"}
           icon={<Save className="size-4" />}
           onClick={async () => {
-            const ok = await run("g", () => request("/api/admin/settings", { method: "PATCH", body: { finance: { goals: rows, goalBasis } } }), "Metas guardadas");
+            const ok = await run("g", () => request("/api/admin/settings", { method: "PATCH", body: { finance: { goals: rows, goalBasis, employerCostPct: employer ?? 0 } } }), "Metas guardadas");
             if (ok) {
               onSaved();
               onClose();
@@ -330,6 +351,9 @@ function GoalsModal({ goals, basis, onClose, onSaved }: { goals: Goal[]; basis: 
               <option value="ganancia">Lo que queda después de insumos y nómina</option>
             </Select>
           )}
+        </Field>
+        <Field label="Carga prestacional" hint="% sobre sueldo y horas extra que la empresa paga además (dato de tu contador).">
+          {(id, d) => <NumberInput id={id} ariaDescribedBy={d} max={200} value={employer} onChange={setEmployer} suffix="%" />}
         </Field>
         {rows.map((g, i) => (
           <div key={i} className="flex flex-wrap items-center gap-2">

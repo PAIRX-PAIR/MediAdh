@@ -177,6 +177,22 @@ export interface PayrollPerson {
   displayName: string;
   monthlySalary: number | null;
   transportAllowance: boolean;
+  /**
+   * Contract periods [from, to] (to null = indefinite). Undefined = paid the
+   * whole quincena (e.g. gerencia without a contract in the app).
+   */
+  employment?: Array<[string, string | null]>;
+}
+
+/**
+ * Commercial days paid in the quincena (Colombian payroll: 15 per quincena):
+ * all 15 when the contract covers the whole period, otherwise the days covered.
+ */
+export function paidDaysIn(q: Quincena, employment: PayrollPerson["employment"]): number {
+  if (!employment) return 15;
+  const dates = datesOf(q);
+  const covered = dates.filter((d) => employment.some(([from, to]) => d >= from && (to === null || d <= to))).length;
+  return covered === dates.length ? 15 : Math.min(15, covered);
 }
 
 export interface PayrollLine {
@@ -184,8 +200,9 @@ export interface PayrollLine {
   name: string;
   monthlySalary: number | null;
   hourlyValue: number;
-  /** Half of the monthly salary (15 días). */
+  /** Salary for the days paid (15 = half of the monthly salary). */
   basic: number;
+  paidDays: number;
   hours: Record<HourKind, number>;
   amounts: Record<HourKind, number>;
   extrasTotal: number;
@@ -223,9 +240,10 @@ export function liquidate(input: {
       hours[kind] = minutes / 60;
       amounts[kind] = peso((minutes / 60) * hourlyValue * hourFactor(kind, settings));
     }
-    const basic = peso(salary / 2);
+    const paidDays = paidDaysIn(quincena, person.employment);
+    const basic = peso((salary / 30) * paidDays);
     const extrasTotal = HOUR_KINDS.reduce((sum, k) => sum + amounts[k], 0);
-    const transport = person.transportAllowance ? peso(settings.transportAllowance / 2) : 0;
+    const transport = person.transportAllowance ? peso((settings.transportAllowance / 30) * paidDays) : 0;
     // Social security contributions are not charged on the transport allowance.
     const base = basic + extrasTotal;
     const health = peso((base * settings.healthPct) / 100);
@@ -237,6 +255,7 @@ export function liquidate(input: {
       monthlySalary: person.monthlySalary,
       hourlyValue: peso(hourlyValue),
       basic,
+      paidDays,
       hours,
       amounts,
       extrasTotal,

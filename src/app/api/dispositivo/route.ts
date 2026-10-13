@@ -8,7 +8,8 @@ export const GET = route({ access: "public" }, async () => json(await deviceStat
 
 /** The phone asks for access and gets a short code to show as QR. */
 export const POST = route({ access: "public" }, async ({ req }) => {
-  const limit = consume(`device:${clientIp(req.headers)}`, 10, 10 * 60_000);
+  // Generous: every phone on the workshop WiFi shares one public IP.
+  const limit = consume(`device:${clientIp(req.headers)}`, 40, 10 * 60_000);
   if (!limit.ok) throw new HttpError(429, "Demasiadas solicitudes. Espera unos minutos.", "rate_limited");
   return json(await requestDevice(req.headers.get("user-agent")), { status: 201 });
 });

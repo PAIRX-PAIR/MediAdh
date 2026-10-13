@@ -241,7 +241,8 @@ export async function approveQuote(principal: Principal, id: string, input: Appr
           workItems: quote.labor
             .filter((l) => l.hours > 0)
             .map((l) => {
-              const chosen = input.machines[l.id] ?? l.machineId ?? undefined;
+              // An explicit choice in the approve dialog (even "sin máquina" = null) wins over the quoted machine.
+              const chosen = l.id in input.machines ? input.machines[l.id] : (l.machineId ?? undefined);
               const machineId = chosen !== undefined ? chosen : (leastLoadedMachine(docs.machines.items, assigned, l.process)?.id ?? null);
               if (machineId) assigned.push(pseudoLoad(machineId, l.process, l.hours));
               return { process: l.process, machineId, description: l.description, plannedHours: l.hours };

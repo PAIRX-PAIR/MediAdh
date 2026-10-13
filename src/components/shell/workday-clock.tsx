@@ -23,9 +23,11 @@ export function WorkdayClock({ date, shifts, timezone, className }: { date: stri
   }, []);
   if (now === null) return <span className={cn("block h-9 w-28", className)} />;
 
-  const [hh, mm] = timeInZone(new Date(now), timezone).split(":");
+  const label = format12h(timeInZone(new Date(now), timezone)); // "2:05 p. m."
+  const [clock = "", ...rest] = label.split(" ");
+  const [hour, mm] = clock.split(":");
+  const suffix = rest.join(" ");
   const status = workdayStatus(now, date, shifts, timezone);
-  const hour = ((Number(hh) + 11) % 12) + 1;
   const detail =
     status.phase === "libre"
       ? "Hoy no se trabaja"
@@ -38,12 +40,12 @@ export function WorkdayClock({ date, shifts, timezone, className }: { date: stri
             : `Sale ${format12h(status.end!)} · faltan ${formatDuration(status.remainingMinutes)}`;
 
   return (
-    <div className={cn("flex flex-col items-end leading-tight", className)} role="timer" aria-label={`Son las ${hour}:${mm} ${Number(hh) < 12 ? "a. m." : "p. m."}. ${detail}`}>
+    <div className={cn("flex flex-col items-end leading-tight", className)} role="timer" aria-label={`Son las ${label}. ${detail}`}>
       <time className="font-mono text-sm tabular-nums text-glow-soft" aria-hidden>
         {hour}
         <span className="animate-blink">:</span>
         {mm}
-        <span className="ml-1 text-[11px]">{Number(hh) < 12 ? "a. m." : "p. m."}</span>
+        <span className="ml-1 text-[11px]">{suffix}</span>
       </time>
       <span className={cn("text-[11px]", status.phase === "turno" ? "text-ink-soft" : "text-muted")} aria-hidden>
         {detail}

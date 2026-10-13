@@ -7,7 +7,7 @@ import { adjustForInflation, ipcVariations } from "./ipc";
 import { lastMonths, managementIndex, monthlyKpis, machineKpis } from "./kpi";
 import { canTransition, dueReminders, isLate, shouldAutoClose, statusFromWork } from "./lifecycle";
 import { formatNit, parseNit, verificationDigit } from "./nit";
-import { dayHours, liquidate, quincenaOf, shiftQuincena } from "./payroll";
+import { dayHours, liquidate, paidDaysIn, quincenaOf, shiftQuincena } from "./payroll";
 import { canCommit, machineHoursOn, nextUp, occupancy, planOrders, prioritize, type PlanContext } from "./planning";
 import { extraMarginPct, quoteDisplayStatus, quoteTotals } from "./quote";
 import type { Machine, Order, WorkItem } from "./schema";
@@ -112,6 +112,15 @@ describe("nómina quincenal", () => {
     expect(dayHours("2026-10-14", [block("2026-10-14", "07:30", "12:07")], smi, settings).minutes.extraDay).toBe(0);
     // Un bloque sin salida no cuenta hasta que se corrija.
     expect(dayHours("2026-10-14", [block("2026-10-14", "07:30", null)], smi, settings)).toMatchObject({ workedMinutes: 0, openEntries: 1 });
+  });
+
+  it("paga por los días de contrato dentro de la quincena (15 si la cubre toda)", () => {
+    const q = quincenaOf("2026-10-20"); // 16–31 oct: 16 días calendario = 15 comerciales
+    expect(paidDaysIn(q, undefined)).toBe(15);
+    expect(paidDaysIn(q, [["2026-01-01", null]])).toBe(15);
+    expect(paidDaysIn(q, [["2026-10-27", null]])).toBe(5); // ingresó el 27
+    expect(paidDaysIn(q, [["2026-01-01", "2026-10-20"]])).toBe(5); // terminó el 20
+    expect(paidDaysIn(quincenaOf("2026-02-20"), [["2026-01-01", null]])).toBe(15); // febrero completo
   });
 
   it("liquida básico, extras, auxilio y descuentos de ley", () => {

@@ -639,6 +639,12 @@ export const financeSettingsSchema = z.object({
   goals: z.array(goalSchema).max(10).default(DEFAULT_GOALS),
   /** What the goals measure: ventas del mes or what remains after insumos y nómina. */
   goalBasis: z.enum(["ventas", "ganancia"]).default("ventas"),
+  /**
+   * Employer cost on top of what is paid (seguridad social del empleador, ARL,
+   * caja, prima, cesantías, vacaciones) as % of salary + overtime. 0 until the
+   * accountant gives the workshop's figure.
+   */
+  employerCostPct: z.number().min(0).max(200).default(0),
 });
 export type FinanceSettings = z.infer<typeof financeSettingsSchema>;
 

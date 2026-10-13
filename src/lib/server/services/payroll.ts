@@ -29,7 +29,9 @@ export async function clock(principal: Principal, action: "in" | "out"): Promise
   const actor = actorOf(principal);
   return getDb().transact(["attendance", "audit"], action === "in" ? "Marca entrada" : "Marca salida", ({ attendance, audit: log }) => {
     const mine = attendance.items.filter((e) => e.userId === principal.user.id);
-    const open = mine.find((e) => e.end === null);
+    // Today's open block decides; a block forgotten on another day must not block today.
+    const open = mine.find((e) => e.end === null && e.date === date);
+    const stale = mine.find((e) => e.end === null && e.date !== date);
     if (action === "in") {
       if (open?.date === date) throw badRequest(`Ya marcaste entrada a las ${open.start}. Marca la salida primero.`);
       const now = nowIso();
@@ -52,10 +54,10 @@ export async function clock(principal: Principal, action: "in" | "out"): Promise
       audit(log, actor, "entrada_marcada", entry.id, `${date} ${time}`);
       return entry;
     }
-    if (!open || open.date !== date) {
+    if (!open) {
       throw badRequest(
-        open
-          ? `Tu entrada del ${open.date} quedó sin salida. Pide al coordinador que la corrija y marca entrada de nuevo.`
+        stale
+          ? `No tienes una entrada abierta hoy. Tu entrada del ${stale.date} quedó sin salida: pide al coordinador que la corrija.`
           : "No tienes una entrada abierta hoy.",
       );
     }
@@ -100,14 +102,20 @@ export function payrollPeopleFor(docs: Pick<Database, "users" | "positions">, en
   const positionOf = (u: User) => docs.positions.items.find((p) => activeHolderId(p, today) === u.id)?.title ?? null;
   return docs.users.items
     .filter((u) => u.status === "active" && (u.kind === "staff" || u.monthlySalary !== null || withEntries.has(u.id)))
-    .map((u) => ({
-      id: u.id,
-      displayName: u.displayName,
-      username: u.username,
-      monthlySalary: u.monthlySalary,
-      transportAllowance: u.transportAllowance,
-      positionTitle: positionOf(u),
-    }))
+    .map((u) => {
+      // Paid by contract dates when the person has contracts (operarios, coordinación, asistencia).
+      const contracts = docs.positions.items.flatMap((p) => [p.contract, ...p.contractHistory]).filter((c) => c?.userId === u.id);
+      const employment = contracts.map((c): [string, string | null] => [c!.startDate, c!.endedAt ? c!.endedAt.slice(0, 10) : c!.endDate]);
+      return {
+        id: u.id,
+        displayName: u.displayName,
+        username: u.username,
+        monthlySalary: u.monthlySalary,
+        transportAllowance: u.transportAllowance,
+        positionTitle: positionOf(u),
+        employment: employment.length ? employment : undefined,
+      };
+    })
     .sort((a, b) => a.displayName.localeCompare(b.displayName, "es"));
 }
 

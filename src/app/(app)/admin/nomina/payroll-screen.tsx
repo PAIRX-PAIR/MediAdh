@@ -151,7 +151,7 @@ export function PayrollScreen() {
                   money
                     ? [
                         ["Trabajadas / horario", `${hrs(l.workedHours)} / ${hrs(l.scheduledHours)}`],
-                        ["Básico (15 días)", formatCop(l.basic)],
+                        [`Básico (${l.paidDays} días)`, formatCop(l.basic)],
                         ["Horas extra", `${hrs(extraHours(l))} · ${formatCop(l.extrasTotal)}`],
                         ["Auxilio de transporte", formatCop(l.transport)],
                         ["Salud + pensión", `− ${formatCop(l.health + l.pension)}`],
@@ -231,7 +231,7 @@ function PersonModal({ report, line, onClose, onChanged }: { report: PayrollRepo
             </h3>
             <ul className="flex flex-col gap-1 text-sm">
               <li className="flex justify-between gap-3">
-                <span className="text-ink-soft">Básico (15 días)</span>
+                <span className="text-ink-soft">Básico ({line.paidDays} días)</span>
                 <span className="tabular text-ink">{formatCop(line.basic)}</span>
               </li>
               {HOUR_KINDS.filter((k) => line.hours[k] > 0).map((k) => (

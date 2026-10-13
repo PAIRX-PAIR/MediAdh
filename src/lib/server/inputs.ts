@@ -235,6 +235,7 @@ const financeSettingsPatch = z
   .object({
     goals: z.array(z.object({ label: requiredText(40), amount: money, bonus: z.boolean().default(false) })).max(10),
     goalBasis: z.enum(["ventas", "ganancia"]),
+    employerCostPct: z.number().min(0).max(200),
   })
   .partial();
 

@@ -6,6 +6,7 @@ import QRCode from "qrcode";
 import { useCallback, useEffect, useState } from "react";
 import { BrandMark } from "@/components/shell/brand-mark";
 import { Button, Spinner } from "@/components/ui/primitives";
+import { formatDeviceCode as pretty } from "@/lib/domain/device-code";
 import { BoardScreen } from "../tablero/[token]/board-screen";
 
 type State =
@@ -16,8 +17,6 @@ type State =
 
 const POLL_MS = 3000;
 
-/** "8 letras" shown in two groups so it can be read aloud. */
-const pretty = (code: string) => `${code.slice(0, 4)}-${code.slice(4)}`;
 
 /**
  * Operator entry: the phone asks for access and shows a QR; an admin scans it

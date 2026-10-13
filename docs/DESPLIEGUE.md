@@ -35,7 +35,7 @@ Importa `PAIRX-PAIR/MediAdh` en Vercel (framework Next.js, Node 24). Variables d
 
 ## 4. Firewall (tú)
 
-Vercel → Firewall → regla de límite de tasa para `/api/auth/` (por ejemplo 10 peticiones por minuto por IP). Protege el inicio de sesión y el registro antes de que lleguen a la base de datos.
+Vercel → Firewall → reglas de límite de tasa para `/api/auth/` (por ejemplo 10 peticiones por minuto por IP) y para `POST /api/dispositivo` (por ejemplo 20 por minuto). Protegen el inicio de sesión y las solicitudes de acceso por QR antes de que lleguen a la base de datos.
 
 ## 5. Equipo inicial (tú, una vez)
 
