@@ -27,7 +27,7 @@ export const DEFAULT_MACHINES: Array<Pick<Machine, "id" | "name" | "process" | "
   { id: "cnc-2", name: "CNC²", process: "cnc", description: "Próxima compra", state: "inactiva", order: 2, positionId: "programador-cnc" },
   { id: "torno-cnc", name: "Torno CNC", process: "cnc", description: "Próxima compra", state: "inactiva", order: 3, positionId: "programador-cnc" },
   { id: "pinacho", name: "Pinacho", process: "torno", description: "Torno convencional", state: "activa", order: 4, positionId: "tornero-1" },
-  { id: "wkt", name: "WKT", process: "torno", description: "Torno convencional", state: "activa", order: 5, positionId: "tornero-1" },
+  { id: "wkt", name: "WKT", process: "torno", description: "Torno convencional", state: "activa", order: 5, positionId: "fresadora" },
   { id: "bouchi", name: "Bouchi", process: "torno", description: "Torno convencional", state: "activa", order: 6, positionId: "tornero-1" },
   { id: "fresadora", name: "Fresadora", process: "fresadora", description: "Fresadora universal", state: "activa", order: 7, positionId: "fresadora" },
   { id: "cepillo", name: "Cepillo", process: "cepillo", description: "", state: "activa", order: 8, positionId: "fresadora" },
