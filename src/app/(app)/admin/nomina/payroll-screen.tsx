@@ -97,7 +97,7 @@ export function PayrollScreen() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
         {money ? (
           <StatTile label="Neto a pagar" value={formatCop(report.lines.reduce((s, l) => s + l.net, 0))} tone="glow" icon={<Wallet />} />
         ) : (

@@ -1,4 +1,4 @@
-import { addDays } from "./time";
+import { addDays, zonedInstant } from "./time";
 
 /**
  * Colombian public holidays (Ley 51 de 1983 "Ley Emiliani"): some dates are
@@ -132,4 +132,44 @@ export function shiftsOn(date: string, cal: WorkCalendar): Shift[] {
 export function calendarHours(date: string, hoursPerDay: number | null, cal: WorkCalendar): number {
   const hours = shiftsMinutes(shiftsOn(date, cal)) / 60;
   return hoursPerDay === null ? hours : Math.min(hours, hoursPerDay);
+}
+
+export type WorkdayPhase = "libre" | "antes" | "turno" | "pausa" | "terminada";
+
+export interface WorkdayStatus {
+  phase: WorkdayPhase;
+  /** First entry and last exit of the day (HH:mm), null on a day off. */
+  start: string | null;
+  end: string | null;
+  /** Working minutes left today (pauses such as lunch excluded). */
+  remainingMinutes: number;
+  /** During a pause: when work resumes (HH:mm). */
+  resumesAt: string | null;
+}
+
+/** Where the workday stands at `now` given today's shifts (workshop time). */
+export function workdayStatus(now: number, date: string, shifts: Shift[], timezone: string): WorkdayStatus {
+  if (shifts.length === 0) return { phase: "libre", start: null, end: null, remainingMinutes: 0, resumesAt: null };
+  const blocks = shifts.map((s) => ({ ...s, from: zonedInstant(date, s.start, timezone).getTime(), to: zonedInstant(date, s.end, timezone).getTime() }));
+  const remaining = blocks.reduce((sum, b) => sum + Math.max(0, b.to - Math.max(b.from, now)), 0);
+  const base = { start: shifts[0]!.start, end: shifts[shifts.length - 1]!.end, remainingMinutes: Math.ceil(remaining / 60_000), resumesAt: null };
+  if (now < blocks[0]!.from) return { ...base, phase: "antes" };
+  if (now >= blocks[blocks.length - 1]!.to) return { ...base, phase: "terminada", remainingMinutes: 0 };
+  if (blocks.some((b) => now >= b.from && now < b.to)) return { ...base, phase: "turno" };
+  return { ...base, phase: "pausa", resumesAt: blocks.find((b) => b.from > now)?.start ?? null };
+}
+
+/** "07:30" → "7:30 a. m." (12-hour clock, Colombian style). */
+export function format12h(time: string): string {
+  const [h, m] = time.split(":").map(Number);
+  const suffix = (h ?? 0) < 12 ? "a. m." : "p. m.";
+  const hour = ((h ?? 0) + 11) % 12 + 1;
+  return `${hour}:${String(m ?? 0).padStart(2, "0")} ${suffix}`;
+}
+
+/** 155 → "2 h 35 min". */
+export function formatDuration(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h > 0 ? `${h} h${m ? ` ${m} min` : ""}` : `${m} min`;
 }

@@ -231,6 +231,13 @@ const payrollSettingsPatch = z
   })
   .partial();
 
+const financeSettingsPatch = z
+  .object({
+    goals: z.array(z.object({ label: requiredText(40), amount: money, bonus: z.boolean().default(false) })).max(10),
+    goalBasis: z.enum(["ventas", "ganancia"]),
+  })
+  .partial();
+
 export const settingsPatchInput = z
   .object({
     workshopName: requiredText(60),
@@ -243,6 +250,7 @@ export const settingsPatchInput = z
     publishPolicyVersion: date,
     production: productionSettingsPatch,
     payroll: payrollSettingsPatch,
+    finance: financeSettingsPatch,
   })
   .partial();
 

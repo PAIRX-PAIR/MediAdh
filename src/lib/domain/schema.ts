@@ -625,6 +625,23 @@ export const payrollSettingsSchema = z.object({
 });
 export type PayrollSettings = z.infer<typeof payrollSettingsSchema>;
 
+/** Metas mensuales de ventas (COP antes de IVA); the last one can be marked as bonus. */
+export const goalSchema = z.object({ label: z.string().max(40), amount: z.number().min(0), bonus: z.boolean().default(false) });
+export type Goal = z.infer<typeof goalSchema>;
+export const DEFAULT_GOALS: Goal[] = [
+  { label: "Meta 1", amount: 30_000_000, bonus: false },
+  { label: "Meta 2", amount: 50_000_000, bonus: false },
+  { label: "Meta 3", amount: 70_000_000, bonus: false },
+  { label: "Meta 4", amount: 90_000_000, bonus: false },
+  { label: "Bonus", amount: 100_000_000, bonus: true },
+];
+export const financeSettingsSchema = z.object({
+  goals: z.array(goalSchema).max(10).default(DEFAULT_GOALS),
+  /** What the goals measure: ventas del mes or what remains after insumos y nómina. */
+  goalBasis: z.enum(["ventas", "ganancia"]).default("ventas"),
+});
+export type FinanceSettings = z.infer<typeof financeSettingsSchema>;
+
 /** One clock-in/clock-out block of a person (registro de horas). */
 export const attendanceSchema = z.object({
   id,
@@ -701,6 +718,7 @@ export const settingsSchema = z.object({
   legal: legalInfoSchema,
   production: productionSettingsSchema.default(productionSettingsSchema.parse({})),
   payroll: payrollSettingsSchema.default(payrollSettingsSchema.parse({})),
+  finance: financeSettingsSchema.default(financeSettingsSchema.parse({})),
   updatedAt: isoDateTime,
 });
 export type Settings = z.infer<typeof settingsSchema>;

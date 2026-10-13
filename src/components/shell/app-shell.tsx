@@ -4,17 +4,19 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { AlertOctagon, Bell, CheckCheck, LogOut, Megaphone, Menu, Wifi, WifiOff, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useSync } from "@/components/providers/sync-provider";
 import { PwaBridge } from "@/components/pwa/pwa-bridge";
 import { Button, cn } from "@/components/ui/primitives";
 import { Modal } from "@/components/ui/overlay";
 import { api } from "@/lib/client/api";
+import { shiftsOn } from "@/lib/domain/calendar";
 import { timeAgo } from "@/lib/domain/labels";
 import type { NotificationView } from "@/lib/domain/views";
 import { BrandMark } from "./brand-mark";
 import { ADMIN_NAV, ADMIN_WORKER_EXTRAS, WORKER_NAV, type NavItem } from "./nav";
 import { ProfileGate } from "./profile-gate";
+import { WorkdayClock } from "./workday-clock";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { data } = useSync();
@@ -113,7 +115,12 @@ function TopBar({ onBell, onMenu }: { onBell: () => void; onMenu: () => void }) 
           </div>
         </Link>
         <div className="ml-auto flex items-center gap-2">
-          <Clock />
+          <WorkdayClock
+            className="hidden sm:flex"
+            date={data.today}
+            shifts={shiftsOn(data.today, data.production.calendar)}
+            timezone={data.settings.timezone}
+          />
           <ConnectionDot state={connection} />
           <button
             type="button"
@@ -141,30 +148,6 @@ function TopBar({ onBell, onMenu }: { onBell: () => void; onMenu: () => void }) 
         </div>
       </div>
     </header>
-  );
-}
-
-function Clock() {
-  const [now, setNow] = useState<Date | null>(null);
-  useEffect(() => {
-    // Rendered client-side only (avoids a server/client time mismatch).
-    const tick = () => setNow(new Date());
-    const first = setTimeout(tick, 0);
-    const id = setInterval(tick, 1000);
-    return () => {
-      clearTimeout(first);
-      clearInterval(id);
-    };
-  }, []);
-  if (!now) return <span className="hidden w-[74px] sm:block" />;
-  const hh = now.getHours().toString().padStart(2, "0");
-  const mm = now.getMinutes().toString().padStart(2, "0");
-  return (
-    <time className="hidden font-mono text-sm tabular-nums text-glow-soft sm:block" aria-label="Hora actual">
-      {hh}
-      <span className="animate-blink">:</span>
-      {mm}
-    </time>
   );
 }
 

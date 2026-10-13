@@ -3,6 +3,7 @@
 import { AlertTriangle, Ban, Clock, Wrench } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { BrandMark } from "@/components/shell/brand-mark";
+import { WorkdayClock } from "@/components/shell/workday-clock";
 import { Chip, Spinner, cn } from "@/components/ui/primitives";
 import { DIFFICULTY_LABEL, MACHINE_STATE_LABEL, PROCESS_LABEL, formatDate } from "@/lib/domain/labels";
 import type { Board, BoardGroup, BoardJob } from "@/lib/server/services/board";
@@ -83,6 +84,7 @@ export function BoardScreen({
             </p>
           </div>
         </div>
+        <WorkdayClock date={board.today} shifts={board.shiftsToday} timezone={board.timezone} />
         {actions}
         {board.groups.length > 1 && (
           <label className="flex items-center gap-2 text-sm text-ink-soft">

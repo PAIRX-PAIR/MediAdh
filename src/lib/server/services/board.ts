@@ -53,6 +53,7 @@ export interface BoardGroup {
 export interface Board {
   workshopName: string;
   today: string;
+  timezone: string;
   generatedAt: string;
   shiftsToday: Array<{ start: string; end: string }>;
   groups: BoardGroup[];
@@ -139,6 +140,7 @@ function buildBoard(docs: BoardDocs): Board {
   return {
     workshopName: docs.settings.workshopName,
     today,
+    timezone,
     generatedAt: new Date().toISOString(),
     shiftsToday: shiftsOn(today, calendar),
     groups,

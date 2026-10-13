@@ -95,7 +95,7 @@ export interface PayrollPersonView extends PayrollPerson {
   positionTitle: string | null;
 }
 
-function payrollPeople(docs: Pick<Database, "users" | "positions">, entries: Attendance[], today: string): PayrollPersonView[] {
+export function payrollPeopleFor(docs: Pick<Database, "users" | "positions">, entries: Attendance[], today: string): PayrollPersonView[] {
   const withEntries = new Set(entries.map((e) => e.userId));
   const positionOf = (u: User) => docs.positions.items.find((p) => activeHolderId(p, today) === u.id)?.title ?? null;
   return docs.users.items
@@ -121,7 +121,7 @@ export async function payrollReport(principal: Principal, key: string | null) {
     .sort((a, b) => (a.date === b.date ? a.start.localeCompare(b.start) : a.date.localeCompare(b.date)));
   const owner = isOwner(principal);
   // Coordinación y asistencia keep the hours log; salaries and money stay with gerencia/administración.
-  const people = payrollPeople(docs, entries, principal.today).map((p) => (owner ? p : { ...p, monthlySalary: null, transportAllowance: false }));
+  const people = payrollPeopleFor(docs, entries, principal.today).map((p) => (owner ? p : { ...p, monthlySalary: null, transportAllowance: false }));
   return {
     moneyHidden: !owner,
     quincena,

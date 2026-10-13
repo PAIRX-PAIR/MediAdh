@@ -73,7 +73,7 @@ export function StatTile({
         <span className="hud-label">{label}</span>
         {icon && <span className={cn("[&>svg]:size-4", TILE_TONE[tone])} aria-hidden>{icon}</span>}
       </div>
-      <span className={cn("tabular font-display text-3xl font-bold leading-none", TILE_TONE[tone])}>{value}</span>
+      <span className={cn("tabular break-words font-display text-2xl font-bold leading-none sm:text-3xl", TILE_TONE[tone])}>{value}</span>
       {hint && <span className="text-xs text-muted">{hint}</span>}
     </div>
   );

@@ -479,3 +479,25 @@ describe("operarios sin sesión y tablero del taller", () => {
     await expect(board.boardFor(token)).rejects.toMatchObject({ status: 404 });
   });
 });
+
+describe("ganancias del mes", () => {
+  it("ventas entregadas menos insumos y las dos quincenas, con lo que se paga a cada quien", async () => {
+    const { admin } = await setup();
+    const finance = await import("./finance");
+    const payroll = await import("./payroll");
+    const { order } = await orders.createOrder(admin, baseOrder({ price: 2_000_000, supplies: [{ description: "Acero", supplier: "", quantity: 1, unitCost: 300_000 }] }));
+    await orders.orderAction(admin, order.id, { action: "deliver", satisfaction: null, finalPrice: null });
+    const { users } = await db.read(["users"]);
+    await payroll.setPay(admin, users.items.find((u) => u.username === "tornero1")!.id, { monthlySalary: 2_100_000 });
+
+    const report = await finance.financeReport(admin, null);
+    expect(report).toMatchObject({ sales: 2_000_000, supplies: 300_000 });
+    const tornero = report.payroll.find((p) => p.name === "Tornero Uno")!;
+    // Sin horas extra: 1.050.000 por quincena menos salud y pensión (8 %).
+    expect(tornero.q1).toMatchObject({ earned: 1_050_000, net: 966_000 });
+    expect(tornero.net).toBe(1_932_000);
+    expect(report.profit).toBe(2_000_000 - 300_000 - report.payrollQ1 - report.payrollQ2);
+    expect(report.goals.progress.next?.label).toBe("Meta 1");
+    await expect(finance.financeReport(admin, "2026-13")).rejects.toMatchObject({ status: 400 });
+  });
+});

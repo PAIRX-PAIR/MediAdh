@@ -1,6 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import type { Announcement, LegalInfo, Notification, PayrollSettings, ProductionSettings } from "@/lib/domain/schema";
+import type { Announcement, FinanceSettings, LegalInfo, Notification, PayrollSettings, ProductionSettings } from "@/lib/domain/schema";
 import { isValidTimeZone, isRealDate } from "@/lib/domain/time";
 import { hashPassword } from "../auth/password";
 import type { Principal } from "../auth/principal";
@@ -73,6 +73,8 @@ export interface SettingsPatch {
   production?: Partial<Omit<ProductionSettings, "processRates">> & { processRates?: Partial<ProductionSettings["processRates"]> };
   /** Nómina: hourly divisor, surcharges, deductions and transport allowance. */
   payroll?: Partial<PayrollSettings>;
+  /** Metas mensuales. */
+  finance?: Partial<FinanceSettings>;
 }
 
 export async function updateSettings(principal: Principal, patch: SettingsPatch) {
@@ -102,6 +104,7 @@ export async function updateSettings(principal: Principal, patch: SettingsPatch)
       if (settings.production.schedule.every((day) => day.length === 0)) throw badRequest("El horario debe tener al menos un turno.");
     }
     if (patch.payroll) settings.payroll = { ...settings.payroll, ...patch.payroll };
+    if (patch.finance) settings.finance = { ...settings.finance, ...patch.finance };
     settings.updatedAt = nowIso();
     const changed = Object.keys(patch).filter((k) => k !== "registrationCode");
     audit(log, actorOf(principal), "configuracion_actualizada", null, [...changed, ...(codeHash !== undefined ? ["codigo_registro"] : [])].join(", "));

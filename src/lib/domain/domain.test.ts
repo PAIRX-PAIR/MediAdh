@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_WEEK_SCHEDULE, calendarHours, colombianHolidays, easterSunday, weeklyHours, type WorkCalendar } from "./calendar";
+import { DEFAULT_WEEK_SCHEDULE, calendarHours, colombianHolidays, easterSunday, format12h, formatDuration, weeklyHours, workdayStatus, type WorkCalendar } from "./calendar";
 import { defaultMachines } from "./defaults";
 import { diffFields, recordChange } from "./diff";
+import { goalProgress, shiftMonth } from "./finance";
 import { adjustForInflation, ipcVariations } from "./ipc";
 import { lastMonths, managementIndex, monthlyKpis, machineKpis } from "./kpi";
 import { canTransition, dueReminders, isLate, shouldAutoClose, statusFromWork } from "./lifecycle";
@@ -416,5 +417,43 @@ describe("IPC y cambios", () => {
     ]);
     const history = recordChange([], { actorId: "u", actorName: "U", action: "editó", changes }, 1);
     expect(recordChange(history, { actorId: "u", actorName: "U", action: "otra", changes: [] }, 1)).toHaveLength(1);
+  });
+});
+
+describe("metas del mes", () => {
+  const goals = [
+    { label: "Meta 1", amount: 30_000_000, bonus: false },
+    { label: "Meta 2", amount: 50_000_000, bonus: false },
+    { label: "Meta 3", amount: 70_000_000, bonus: false },
+    { label: "Meta 4", amount: 90_000_000, bonus: false },
+    { label: "Bonus", amount: 100_000_000, bonus: true },
+  ];
+  it("dice qué metas se cumplieron y cuánto falta para la siguiente", () => {
+    const p = goalProgress(42_000_000, goals);
+    expect(p.reached.map((g) => g.label)).toEqual(["Meta 1"]);
+    expect(p.next?.label).toBe("Meta 2");
+    expect(p.missing).toBe(8_000_000);
+    expect(p.ratio).toBeCloseTo(0.42);
+    expect(goalProgress(120_000_000, goals)).toMatchObject({ next: null, missing: 0, ratio: 1 });
+    expect(shiftMonth("2026-01", -1)).toBe("2025-12");
+    expect(shiftMonth("2026-12", 1)).toBe("2027-01");
+  });
+});
+
+describe("reloj de jornada", () => {
+  const tue = DEFAULT_WEEK_SCHEDULE[1]!; // 7:30–12:00 y 13:30–17:00
+  const at = (time: string) => zonedInstant("2026-10-13", time, TZ).getTime();
+  it("dice cuánto falta por trabajar sin contar el almuerzo, en 12 h", () => {
+    expect(workdayStatus(at("07:00"), "2026-10-13", tue, TZ)).toMatchObject({ phase: "antes", start: "07:30", end: "17:00", remainingMinutes: 480 });
+    expect(workdayStatus(at("10:00"), "2026-10-13", tue, TZ)).toMatchObject({ phase: "turno", remainingMinutes: 120 + 210 });
+    expect(workdayStatus(at("12:30"), "2026-10-13", tue, TZ)).toMatchObject({ phase: "pausa", resumesAt: "13:30", remainingMinutes: 210 });
+    expect(workdayStatus(at("17:05"), "2026-10-13", tue, TZ)).toMatchObject({ phase: "terminada", remainingMinutes: 0 });
+    expect(workdayStatus(at("10:00"), "2026-10-18", [], TZ).phase).toBe("libre");
+    expect(format12h("07:30")).toBe("7:30 a. m.");
+    expect(format12h("13:30")).toBe("1:30 p. m.");
+    expect(format12h("00:05")).toBe("12:05 a. m.");
+    expect(format12h("12:00")).toBe("12:00 p. m.");
+    expect(formatDuration(155)).toBe("2 h 35 min");
+    expect(formatDuration(45)).toBe("45 min");
   });
 });

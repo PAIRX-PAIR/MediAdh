@@ -1,4 +1,4 @@
-import { payrollSettingsSchema, productionSettingsSchema, type Collection, type Database, type Machine, type Position, type Settings } from "./schema";
+import { financeSettingsSchema, payrollSettingsSchema, productionSettingsSchema, type Collection, type Database, type Machine, type Position, type Settings } from "./schema";
 import { DEFAULT_TIMEZONE } from "./time";
 
 export const LEGAL_POLICY_VERSION = "2026-10-12";
@@ -86,6 +86,7 @@ export function defaultSettings(now: string): Settings {
     },
     production: productionSettingsSchema.parse({}),
     payroll: payrollSettingsSchema.parse({}),
+    finance: financeSettingsSchema.parse({}),
     updatedAt: now,
   };
 }
