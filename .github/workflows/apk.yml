@@ -38,6 +38,10 @@ jobs:
           java-version: "17"
 
       - uses: android-actions/setup-android@v3
+        with:
+          # The default list includes the retired "tools" package, which makes sdkmanager fail.
+          packages: "platform-tools"
+          log-accepted-android-sdk-licenses: false
 
       - uses: actions/setup-node@v4
         with:
