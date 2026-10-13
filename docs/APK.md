@@ -41,7 +41,7 @@ Después de desplegar, `https://TU-DOMINIO/.well-known/assetlinks.json` debe mos
 
 ## 3. Generar el APK
 
-Con el workflow ya en `.github/workflows/`: GitHub → **Actions → APK Android → Run workflow**. Escribe el dominio (ej. `smi-procesos.vercel.app`), la versión visible y un número de versión que siempre suba (1, 2, 3…). Al terminar, descarga el artefacto: trae `app-release-signed.apk` (para instalar directo) y `app-release-bundle.aab` (por si algún día se publica en Play Store).
+GitHub → **Actions → APK Android → Run workflow**. Escribe el dominio (ej. `smi-procesos.vercel.app`), la versión visible y un número de versión que siempre suba (1, 2, 3…). Al terminar, descarga el artefacto: trae `app-release-signed.apk` (para instalar directo) y `app-release-bundle.aab` (por si algún día se publica en Play Store).
 
 ## 4. Instalar en los celulares
 

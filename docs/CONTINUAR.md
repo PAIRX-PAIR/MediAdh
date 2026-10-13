@@ -25,17 +25,16 @@ Administrador real: `judago` (declarado con `ADMIN_BOOTSTRAP_*` en `.env.local`;
 - **Equipo inicial**: `npm run equipo:cargar` con `equipo.local.json` (no se sube).
 - **Interfaz**: landing con hero 3D procedural (torno, engranajes, CNC, soldadura) guiado por el scroll y póster sin movimiento, ventana de acceso, /setup, centro legal (Ley 1581/2012, Decreto 1377/2013, Ley 527/1999), HUD del operario y consola completa.
 - **PWA**: manifest, íconos generados, `sw.js` (push declarativo, clic, sin conexión), `/inicio`, `npm run vapid`.
-- **APK**: `android/twa-manifest.json`, `/.well-known/assetlinks.json` desde variables, workflow de Bubblewrap (`deploy/github-workflows/apk.yml`), guía `docs/APK.md`.
-- **Calidad**: CI (`deploy/github-workflows/ci.yml`: check, build, e2e).
+- **APK**: `android/twa-manifest.json`, `/.well-known/assetlinks.json` desde variables, workflow de Bubblewrap (`.github/workflows/apk.yml`), guía `docs/APK.md`.
+- **Calidad**: CI (`.github/workflows/ci.yml`: check, build, e2e).
 
 ## Pendiente (requiere al dueño de las cuentas)
 
-1. **Workflows de GitHub**: el token de `gh` no tiene el permiso `workflow`. Ejecuta `gh auth refresh -h github.com -s workflow` y mueve `deploy/github-workflows/*.yml` a `.github/workflows/`.
-2. **Despliegue en Vercel**: seguir `docs/DESPLIEGUE.md` (repo privado de datos, token fine-grained, variables, regla de firewall).
-3. **APK**: crear el keystore, cargar los secretos y ejecutar el workflow (`docs/APK.md`).
-4. **Nómina**: cargar el sueldo de cada operario y el valor del auxilio de transporte del año (Nómina → Reglas) y validar las reglas con el contador.
-5. **IPC del DANE**: descargar el anexo «Índices – series de empalme» y pegarlo en Ajustes → IPC.
-6. **Prueba en celulares reales** (iPhone en pantalla de inicio y Android) de avisos push y del hero 3D.
+1. **Despliegue en Vercel**: seguir `docs/DESPLIEGUE.md` (repo privado de datos, token fine-grained, variables, regla de firewall).
+2. **APK**: crear el keystore, cargar los secretos y ejecutar el workflow (`docs/APK.md`).
+3. **Nómina**: cargar el sueldo de cada operario y el valor del auxilio de transporte del año (Nómina → Reglas) y validar las reglas con el contador.
+4. **IPC del DANE**: descargar el anexo «Índices – series de empalme» y pegarlo en Ajustes → IPC.
+5. **Prueba en celulares reales** (iPhone en pantalla de inicio y Android) de avisos push y del hero 3D.
 
 ## Mejoras opcionales (no hechas)
 
