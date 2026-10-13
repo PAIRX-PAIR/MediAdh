@@ -56,7 +56,8 @@ export function PayrollScreen() {
     );
   }
 
-  const missingSalary = report.lines.filter((l) => l.monthlySalary === null);
+  const money = !report.moneyHidden;
+  const missingSalary = money ? report.lines.filter((l) => l.monthlySalary === null) : [];
   const open = report.lines.reduce((sum, l) => sum + l.openEntries, 0);
   const person = report.lines.find((l) => l.userId === personId) ?? null;
 
@@ -79,24 +80,36 @@ export function PayrollScreen() {
             <IconButton label="Quincena siguiente" onClick={() => go(report.next)}>
               <ChevronRight className="size-5" />
             </IconButton>
-            <a
-              href={api.exportUrl("nomina", report.quincena.key)}
-              className="inline-flex h-11 items-center gap-2 rounded-xl border border-line px-3 text-sm font-semibold text-ink-soft hover:border-glow/60 hover:text-ink"
-            >
-              <Download className="size-4" aria-hidden /> Excel
-            </a>
-            <Button variant="secondary" icon={<Settings2 className="size-4" />} onClick={() => setConfig(true)}>
-              Reglas
-            </Button>
+            {money && (
+              <a
+                href={api.exportUrl("nomina", report.quincena.key)}
+                className="inline-flex h-11 items-center gap-2 rounded-xl border border-line px-3 text-sm font-semibold text-ink-soft hover:border-glow/60 hover:text-ink"
+              >
+                <Download className="size-4" aria-hidden /> Excel
+              </a>
+            )}
+            {money && (
+              <Button variant="secondary" icon={<Settings2 className="size-4" />} onClick={() => setConfig(true)}>
+                Reglas
+              </Button>
+            )}
           </>
         }
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile label="Neto a pagar" value={formatCop(report.lines.reduce((s, l) => s + l.net, 0))} tone="glow" icon={<Wallet />} />
+        {money ? (
+          <StatTile label="Neto a pagar" value={formatCop(report.lines.reduce((s, l) => s + l.net, 0))} tone="glow" icon={<Wallet />} />
+        ) : (
+          <StatTile label="Horas trabajadas" value={hrs(report.lines.reduce((s, l) => s + l.workedHours, 0))} tone="glow" />
+        )}
         <StatTile label="Horas extra" value={hrs(report.lines.reduce((s, l) => s + extraHours(l), 0))} tone="pending" />
-        <StatTile label="Valor extras" value={formatCop(report.lines.reduce((s, l) => s + l.extrasTotal, 0))} />
-        <StatTile label="Personas" value={report.lines.length} hint={`${missingSalary.length} sin sueldo`} tone={missingSalary.length ? "pending" : "neutral"} />
+        {money ? (
+          <StatTile label="Valor extras" value={formatCop(report.lines.reduce((s, l) => s + l.extrasTotal, 0))} />
+        ) : (
+          <StatTile label="Sin salida" value={open} tone={open ? "pending" : "neutral"} />
+        )}
+        <StatTile label="Personas" value={report.lines.length} hint={money ? `${missingSalary.length} sin sueldo` : undefined} tone={missingSalary.length ? "pending" : "neutral"} />
       </div>
 
       {(missingSalary.length > 0 || open > 0) && (
@@ -124,26 +137,35 @@ export function PayrollScreen() {
                 <div className="min-w-0">
                   <p className="truncate font-display text-lg font-semibold text-ink">{l.name}</p>
                   <p className="text-sm text-muted">
-                    {report.people.find((p) => p.id === l.userId)?.positionTitle ?? "Sin puesto"} · {l.monthlySalary === null ? "sin sueldo" : `${formatCop(l.monthlySalary)}/mes`}
+                    {report.people.find((p) => p.id === l.userId)?.positionTitle ?? "Sin puesto"}
+                    {money ? ` · ${l.monthlySalary === null ? "sin sueldo" : `${formatCop(l.monthlySalary)}/mes`}` : ""}
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-1">
-                  {l.monthlySalary === null && <Chip tone="pending">Falta sueldo</Chip>}
+                  {money && l.monthlySalary === null && <Chip tone="pending">Falta sueldo</Chip>}
                   {l.openEntries > 0 && <Chip tone="blocked">{l.openEntries} sin salida</Chip>}
                 </div>
               </header>
               <KeyValues
-                items={[
-                  ["Trabajadas / horario", `${hrs(l.workedHours)} / ${hrs(l.scheduledHours)}`],
-                  ["Básico (15 días)", formatCop(l.basic)],
-                  ["Horas extra", `${hrs(extraHours(l))} · ${formatCop(l.extrasTotal)}`],
-                  ["Auxilio de transporte", formatCop(l.transport)],
-                  ["Salud + pensión", `− ${formatCop(l.health + l.pension)}`],
-                  ["Neto a pagar", <strong key="net" className="text-glow">{formatCop(l.net)}</strong>],
-                ]}
+                items={
+                  money
+                    ? [
+                        ["Trabajadas / horario", `${hrs(l.workedHours)} / ${hrs(l.scheduledHours)}`],
+                        ["Básico (15 días)", formatCop(l.basic)],
+                        ["Horas extra", `${hrs(extraHours(l))} · ${formatCop(l.extrasTotal)}`],
+                        ["Auxilio de transporte", formatCop(l.transport)],
+                        ["Salud + pensión", `− ${formatCop(l.health + l.pension)}`],
+                        ["Neto a pagar", <strong key="net" className="text-glow">{formatCop(l.net)}</strong>],
+                      ]
+                    : [
+                        ["Trabajadas / horario", `${hrs(l.workedHours)} / ${hrs(l.scheduledHours)}`],
+                        ["Horas extra", hrs(extraHours(l))],
+                        ...EXTRA_KINDS.filter((k) => l.hours[k] > 0).map((k): [string, string] => [HOUR_KIND_LABEL[k], hrs(l.hours[k])]),
+                      ]
+                }
               />
               <Button className="mt-3" variant="secondary" size="sm" onClick={() => setPersonId(l.userId)}>
-                Horas y sueldo
+                {money ? "Horas y sueldo" : "Registro de horas"}
               </Button>
             </Panel>
           ))}
@@ -151,8 +173,10 @@ export function PayrollScreen() {
       )}
 
       <p className="text-xs text-muted">
-        Todo lo trabajado fuera del horario del taller es hora extra; domingos y festivos suman el recargo dominical. El valor hora es el sueldo mensual ÷ {report.settings.monthlyHours} h. Es un cálculo de
-        apoyo: confírmalo con tu contador antes de pagar.
+        Todo lo trabajado fuera del horario del taller es hora extra; domingos y festivos suman el recargo dominical.
+        {money
+          ? ` El valor hora es el sueldo mensual ÷ ${report.settings.monthlyHours} h. Es un cálculo de apoyo: confírmalo con tu contador antes de pagar.`
+          : " Los sueldos y valores los ve solo gerencia o administración."}
       </p>
 
       {person && <PersonModal report={report} line={person} onClose={() => setPersonId(null)} onChanged={load} />}
@@ -174,67 +198,71 @@ function PersonModal({ report, line, onClose, onChanged }: { report: PayrollRepo
   return (
     <Modal open onClose={onClose} title={line.name} description={`Quincena del ${periodLabel(report)}`} size="xl">
       <div className="flex flex-col gap-5">
-        <section aria-labelledby="sueldo-title" className="rounded-xl border border-line bg-night/40 p-3">
-          <h3 id="sueldo-title" className="mb-2 font-semibold text-ink">
-            Sueldo
-          </h3>
-          <div className="flex flex-wrap items-end gap-3">
-            <Field label="Sueldo mensual">{(id) => <MoneyInput id={id} value={salary} onChange={setSalary} />}</Field>
-            <label className="flex h-11 items-center gap-2 text-sm text-ink-soft">
-              <input type="checkbox" checked={transport} onChange={(e) => setTransport(e.target.checked)} className="size-5 accent-[var(--color-glow)]" />
-              Recibe auxilio de transporte
-            </label>
-            <Button
-              loading={busy === "pay"}
-              icon={<Save className="size-4" />}
-              onClick={async () => {
-                const ok = await run("pay", () => api.payroll.setPay(line.userId, { monthlySalary: salary, transportAllowance: transport }), "Sueldo guardado");
-                if (ok) await onChanged();
-              }}
-            >
-              Guardar
-            </Button>
-          </div>
-          {line.monthlySalary !== null && <p className="mt-2 text-xs text-muted">Valor hora ordinaria: {formatCop(line.hourlyValue)}</p>}
-        </section>
+        {!report.moneyHidden && (
+          <section aria-labelledby="sueldo-title" className="rounded-xl border border-line bg-night/40 p-3">
+            <h3 id="sueldo-title" className="mb-2 font-semibold text-ink">
+              Sueldo
+            </h3>
+            <div className="flex flex-wrap items-end gap-3">
+              <Field label="Sueldo mensual">{(id) => <MoneyInput id={id} value={salary} onChange={setSalary} />}</Field>
+              <label className="flex h-11 items-center gap-2 text-sm text-ink-soft">
+                <input type="checkbox" checked={transport} onChange={(e) => setTransport(e.target.checked)} className="size-5 accent-[var(--color-glow)]" />
+                Recibe auxilio de transporte
+              </label>
+              <Button
+                loading={busy === "pay"}
+                icon={<Save className="size-4" />}
+                onClick={async () => {
+                  const ok = await run("pay", () => api.payroll.setPay(line.userId, { monthlySalary: salary, transportAllowance: transport }), "Sueldo guardado");
+                  if (ok) await onChanged();
+                }}
+              >
+                Guardar
+              </Button>
+            </div>
+            {line.monthlySalary !== null && <p className="mt-2 text-xs text-muted">Valor hora ordinaria: {formatCop(line.hourlyValue)}</p>}
+          </section>
+        )}
 
-        <section aria-labelledby="extras-title">
-          <h3 id="extras-title" className="mb-2 font-semibold text-ink">
-            Liquidación
-          </h3>
-          <ul className="flex flex-col gap-1 text-sm">
-            <li className="flex justify-between gap-3">
-              <span className="text-ink-soft">Básico (15 días)</span>
-              <span className="tabular text-ink">{formatCop(line.basic)}</span>
-            </li>
-            {HOUR_KINDS.filter((k) => line.hours[k] > 0).map((k) => (
-              <li key={k} className="flex justify-between gap-3">
-                <span className="text-ink-soft">
-                  {HOUR_KIND_LABEL[k]} · {hrs(line.hours[k])} × {hourFactor(k, report.settings).toLocaleString("es-CO")}
-                </span>
-                <span className="tabular text-ink">{formatCop(line.amounts[k])}</span>
+        {!report.moneyHidden && (
+          <section aria-labelledby="extras-title">
+            <h3 id="extras-title" className="mb-2 font-semibold text-ink">
+              Liquidación
+            </h3>
+            <ul className="flex flex-col gap-1 text-sm">
+              <li className="flex justify-between gap-3">
+                <span className="text-ink-soft">Básico (15 días)</span>
+                <span className="tabular text-ink">{formatCop(line.basic)}</span>
               </li>
-            ))}
-            <li className="flex justify-between gap-3">
-              <span className="text-ink-soft">Auxilio de transporte</span>
-              <span className="tabular text-ink">{formatCop(line.transport)}</span>
-            </li>
-            <li className="flex justify-between gap-3 border-t border-line pt-1">
-              <span className="text-ink-soft">Devengado</span>
-              <span className="tabular text-ink">{formatCop(line.earned)}</span>
-            </li>
-            <li className="flex justify-between gap-3">
-              <span className="text-ink-soft">
-                Salud ({report.settings.healthPct} %) y pensión ({report.settings.pensionPct} %)
-              </span>
-              <span className="tabular text-ink">− {formatCop(line.health + line.pension)}</span>
-            </li>
-            <li className="flex justify-between gap-3 border-t border-line pt-1 font-semibold">
-              <span className="text-ink">Neto a pagar</span>
-              <span className="tabular text-glow">{formatCop(line.net)}</span>
-            </li>
-          </ul>
-        </section>
+              {HOUR_KINDS.filter((k) => line.hours[k] > 0).map((k) => (
+                <li key={k} className="flex justify-between gap-3">
+                  <span className="text-ink-soft">
+                    {HOUR_KIND_LABEL[k]} · {hrs(line.hours[k])} × {hourFactor(k, report.settings).toLocaleString("es-CO")}
+                  </span>
+                  <span className="tabular text-ink">{formatCop(line.amounts[k])}</span>
+                </li>
+              ))}
+              <li className="flex justify-between gap-3">
+                <span className="text-ink-soft">Auxilio de transporte</span>
+                <span className="tabular text-ink">{formatCop(line.transport)}</span>
+              </li>
+              <li className="flex justify-between gap-3 border-t border-line pt-1">
+                <span className="text-ink-soft">Devengado</span>
+                <span className="tabular text-ink">{formatCop(line.earned)}</span>
+              </li>
+              <li className="flex justify-between gap-3">
+                <span className="text-ink-soft">
+                  Salud ({report.settings.healthPct} %) y pensión ({report.settings.pensionPct} %)
+                </span>
+                <span className="tabular text-ink">− {formatCop(line.health + line.pension)}</span>
+              </li>
+              <li className="flex justify-between gap-3 border-t border-line pt-1 font-semibold">
+                <span className="text-ink">Neto a pagar</span>
+                <span className="tabular text-glow">{formatCop(line.net)}</span>
+              </li>
+            </ul>
+          </section>
+        )}
 
         <section aria-labelledby="dias-title">
           <h3 id="dias-title" className="mb-2 font-semibold text-ink">

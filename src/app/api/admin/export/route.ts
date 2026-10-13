@@ -4,7 +4,8 @@ import { ORDER_STATUS_LABEL, orderMoney } from "@/lib/domain/lifecycle";
 import { formatNit } from "@/lib/domain/nit";
 import { HOUR_KINDS, HOUR_KIND_LABEL } from "@/lib/domain/payroll";
 import { dateInZone } from "@/lib/domain/time";
-import { badRequest } from "@/lib/server/http";
+import { isOwner } from "@/lib/server/auth/principal";
+import { HttpError, badRequest } from "@/lib/server/http";
 import { route } from "@/lib/server/route";
 import { getDb } from "@/lib/server/store";
 import { payrollReport } from "@/lib/server/services/payroll";
@@ -89,6 +90,7 @@ export const GET = route({ access: "admin" }, async ({ req, principal }) => {
       ]);
     }
   } else if (kind === "nomina") {
+    if (!isOwner(principal)) throw new HttpError(403, "Solo gerencia o administración exportan la nómina.", "owner_only");
     const report = await payrollReport(principal, req.nextUrl.searchParams.get("quincena"));
     const hours = (n: number) => Math.round(n * 100) / 100;
     rows = [

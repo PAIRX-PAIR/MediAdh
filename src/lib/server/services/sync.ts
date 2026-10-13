@@ -21,6 +21,7 @@ function settingsView(settings: Settings): SettingsView {
     workshopName: settings.workshopName,
     timezone: settings.timezone,
     registrationOpen: settings.registrationOpen,
+    staffLogin: settings.staffLogin,
     hasRegistrationCode: Boolean(settings.registrationCodeHash),
     maxPendingRegistrations: settings.maxPendingRegistrations,
     legal: settings.legal,
@@ -164,6 +165,7 @@ export async function buildSync(principal: Principal): Promise<SyncPayload> {
       displayName: user.displayName,
       kind: user.kind,
       isAdmin,
+      scope: principal.scope,
       phone: user.phone,
       mustChangePassword: user.mustChangePassword,
       needsConsent: user.consentVersion !== principal.settings.legal.policyVersion,
@@ -370,7 +372,7 @@ export async function buildPublicInfo(): Promise<PublicInfo> {
     requiresAccessCode: Boolean(settings.registrationCodeHash),
     positions: [...positions.items].sort((a, b) => a.order - b.order).map((p) => ({ id: p.id, title: p.title, area: p.area })),
     legal: settings.legal,
-    demo: isDemoMode() ? DEMO_CREDENTIALS : null,
+    demo: isDemoMode() ? { ...DEMO_CREDENTIALS, board: "/tablero/demo" } : null,
     needsSetup: bootstrapAdminConfigs().length === 0 && !users.items.some((u) => u.kind === "admin"),
   };
 }

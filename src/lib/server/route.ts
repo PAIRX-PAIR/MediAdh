@@ -1,11 +1,12 @@
 import "server-only";
 import type { NextRequest } from "next/server";
 import { ACCESS_DENIAL_MESSAGES } from "@/lib/domain/contracts";
-import { resolvePrincipal, type Principal } from "./auth/principal";
+import { isOwner, resolvePrincipal, type Principal } from "./auth/principal";
 import { createSessionToken, setSessionCookie, shouldRenew } from "./auth/session";
 import { assertSameOrigin, errorResponse, forbidden, HttpError, unauthorized } from "./http";
 
-type Access = "public" | "user" | "admin";
+/** owner = gerencia/administración (scope total); admin = también coordinación y asistencia. */
+type Access = "public" | "user" | "admin" | "owner";
 
 interface RouteOptions {
   access: Access;
@@ -42,6 +43,9 @@ export function route<A extends Access>(
           throw new HttpError(403, "Completa tu perfil (contraseña y autorización de datos) para continuar.", "incomplete_profile");
         }
         if (options.access === "admin" && !principal.isAdmin) throw forbidden();
+        if (options.access === "owner" && !isOwner(principal)) {
+          throw new HttpError(403, "Solo gerencia o administración pueden hacer este cambio.", "owner_only");
+        }
       }
 
       const params = context?.params ? await context.params : {};

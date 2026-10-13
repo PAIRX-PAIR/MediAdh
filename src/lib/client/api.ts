@@ -46,6 +46,8 @@ export interface PayrollPersonView {
 }
 
 export interface PayrollReport {
+  /** Coordinación/asistencia: hours only, no salaries or amounts. */
+  moneyHidden: boolean;
   quincena: Quincena;
   previous: string;
   next: string;
@@ -195,6 +197,7 @@ export interface OrderInput {
   title: string;
   description: string;
   difficulty: Difficulty;
+  urgent?: boolean;
   quantity: number;
   condition: string;
   receivedAt?: string | null;
@@ -240,8 +243,9 @@ export interface QuoteInput {
   description: string;
   quantity: number;
   materials: Array<{ id?: string; description: string; quantity: number; unitCost: number }>;
-  labor: Array<{ id?: string; process: Process; description: string; hours: number; rate: number | null }>;
+  labor: Array<{ id?: string; process: Process; machineId: string | null; description: string; hours: number; rate: number | null }>;
   difficulty: Difficulty;
+  urgent: boolean;
   marginPct: number | null;
   ivaPct: number | null;
   validDays: number | null;
@@ -345,8 +349,10 @@ export const api = {
   admin: {
     createAccount: (input: {
       displayName: string;
+      /** Both empty for an operario without app access. */
       username: string;
       tempPassword: string;
+      adminScope?: "total" | "gestion";
       phone?: string | null;
       kind: "admin" | "staff";
       positionId?: string | null;
@@ -387,6 +393,7 @@ export const api = {
       workshopName?: string;
       timezone?: string;
       registrationOpen?: boolean;
+      staffLogin?: boolean;
       registrationCode?: string;
       maxPendingRegistrations?: number;
       legal?: Partial<Record<"companyName" | "tradeName" | "nit" | "address" | "city" | "email" | "phone" | "privacyContact" | "website", string>>;

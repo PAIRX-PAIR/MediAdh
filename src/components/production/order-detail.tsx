@@ -24,7 +24,7 @@ import { useAction } from "@/lib/client/use-action";
 import { useProduction } from "@/lib/client/use-production";
 import { adjustForInflation } from "@/lib/domain/ipc";
 import { CLAIM_KIND_LABEL, DIFFICULTY_LABEL, PROCESS_LABEL, TASK_STATUS_LABEL, TASK_STATUS_TONE, formatDate, formatDateTime } from "@/lib/domain/labels";
-import { autoCloseAt, orderMoney } from "@/lib/domain/lifecycle";
+import { autoCloseAt, orderMoney, warrantyStatus, type WarrantyStatus } from "@/lib/domain/lifecycle";
 import { formatCop } from "@/lib/domain/quote";
 import type { ClaimKind, Order } from "@/lib/domain/schema";
 import { DueBadge, OrderStatusChip } from "./order-parts";
@@ -206,7 +206,8 @@ export function OrderDetailModal({ orderId, onClose, onEdit, initialTab = "resum
                 ["Cantidad", `${order.intake.quantity}`],
                 ["Ingreso", formatDateTime(order.intake.receivedAt)],
                 ["Entrega pactada", order.due ? `${formatDate(order.due.date, { weekday: "long", day: "numeric", month: "long" })} · ${order.due.time}` : "Sin fecha"],
-                ["Dificultad", DIFFICULTY_LABEL[order.difficulty]],
+                ["Dificultad", `${DIFFICULTY_LABEL[order.difficulty]}${order.urgent ? " · Urgente" : ""}`],
+                ["Garantía", warrantyLabel(warrantyStatus(order, prod.settings?.warrantyDays ?? 90, data.settings.timezone))],
                 ["Estado de llegada", order.intake.condition || "—"],
                 ["Cotización", order.quoteId ? (prod.quotes.find((q) => q.id === order.quoteId)?.folio ?? "Sí") : "—"],
                 ["Satisfacción", <StarRating key="s" value={order.satisfaction} label="Satisfacción del cliente" />],
@@ -530,4 +531,10 @@ function CancelSheet({ orderId, onClose }: { orderId: string; onClose: () => voi
       <Field label="Motivo (opcional)">{(id) => <Input id={id} value={reason} onChange={(e) => setReason(e.target.value)} />}</Field>
     </Modal>
   );
+}
+
+function warrantyLabel(w: WarrantyStatus): string {
+  if (w.weldingOnly) return "Soldadura: sin garantía";
+  if (!w.until) return "Desde la entrega";
+  return `Hasta el ${formatDate(w.until, { day: "numeric", month: "long", year: "numeric" })}${w.excludesWelding ? " (no cubre la soldadura)" : ""}`;
 }

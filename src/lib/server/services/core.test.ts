@@ -38,6 +38,7 @@ async function principalFor(username: string): Promise<Principal> {
     user,
     position: access.position,
     isAdmin: access.isAdmin,
+    scope: access.scope,
     settings,
     today,
     claims: { sub: user.id, sv: user.sessionVersion, iat: 0, exp: 0 },
@@ -47,6 +48,9 @@ async function principalFor(username: string): Promise<Principal> {
 
 async function seedAdmin() {
   await db.transact(["users", "settings"], "seed", ({ users, settings }) => {
+    // These tests cover the generic self-registration and worker login flows.
+    settings.registrationOpen = true;
+    settings.staffLogin = true;
     const now = new Date().toISOString();
     users.items.push({
       id: "admin-1",
@@ -72,6 +76,7 @@ async function seedAdmin() {
       lastLoginAt: null,
       monthlySalary: null,
       transportAllowance: false,
+      adminScope: "total",
     });
   });
 }
@@ -81,7 +86,7 @@ const registration = (over: Partial<Parameters<typeof register>[0]> = {}) => ({
   username: "ana.torres",
   password: "torno azul mañana",
   phone: null,
-  requestedPositionId: "tornero-2",
+  requestedPositionId: "programador-cnc",
   note: null,
   accessCode: null,
   consent: true,
@@ -144,7 +149,7 @@ describe("registro con aprobación", () => {
     const ana = users.items.find((u) => u.username === "ana.torres")!;
     await team.approveRegistration(admin, ana.id, {
       mode: "staff",
-      positionId: "tornero-2",
+      positionId: "programador-cnc",
       replaceCurrent: false,
       startDate: admin.today,
       endDate: addDays(admin.today, 30),

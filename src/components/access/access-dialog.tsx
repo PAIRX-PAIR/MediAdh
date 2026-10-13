@@ -57,26 +57,29 @@ export function AccessDialog({ info }: { info: PublicInfo }) {
     <Modal
       open={open}
       onClose={close}
-      title={tab === "entrar" ? "Iniciar sesión" : "Crear cuenta"}
-      description={info.workshopName}
+      title={tab === "entrar" || !info.registrationOpen ? "Iniciar sesión" : "Crear cuenta"}
+      description={info.registrationOpen ? info.workshopName : `${info.workshopName} · solo administración y coordinación`}
       size="md"
     >
-      <Segmented
-        label="Acceso"
-        value={tab}
-        onChange={setTab}
-        options={[
-          { value: "entrar", label: "Iniciar sesión" },
-          { value: "registro", label: "Crear cuenta" },
-        ]}
-        className="mb-4 w-full [&>button]:flex-1 [&>button]:justify-center"
-      />
+      {/* With registration closed (S.M.I.) only the admins create accounts: no sign-up tab. */}
+      {info.registrationOpen && (
+        <Segmented
+          label="Acceso"
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: "entrar", label: "Iniciar sesión" },
+            { value: "registro", label: "Crear cuenta" },
+          ]}
+          className="mb-4 w-full [&>button]:flex-1 [&>button]:justify-center"
+        />
+      )}
       {(reason || expired) && (
         <p role="alert" className="mb-4 rounded-xl border border-pending/40 bg-pending/10 px-3.5 py-2.5 text-sm text-pending">
           {expired ? "Tu sesión terminó. Vuelve a entrar." : (REASONS[reason!] ?? "No tienes acceso en este momento.")}
         </p>
       )}
-      {tab === "entrar" ? <LoginForm info={info} /> : <RegisterForm info={info} onDone={() => setTab("entrar")} />}
+      {tab === "entrar" || !info.registrationOpen ? <LoginForm info={info} /> : <RegisterForm info={info} onDone={() => setTab("entrar")} />}
     </Modal>
   );
 }
@@ -191,16 +194,12 @@ function LoginForm({ info }: { info: PublicInfo }) {
             >
               Entrar como coordinador
             </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => {
-                setUsername(info.demo!.worker.username);
-                setPassword(info.demo!.worker.password);
-              }}
+            <a
+              href={info.demo.board}
+              className="inline-flex h-9 items-center rounded-lg border border-line px-3 text-sm font-semibold text-ink-soft hover:border-glow/60 hover:text-ink"
             >
-              Entrar como tornero
-            </Button>
+              Ver tablero de operarios
+            </a>
           </div>
         </div>
       )}

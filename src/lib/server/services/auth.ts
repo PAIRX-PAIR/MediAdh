@@ -77,6 +77,7 @@ export async function ensureBootstrapAdmin(username: string) {
       lastLoginAt: null,
       monthlySalary: null,
       transportAllowance: false,
+      adminScope: "total",
     };
     draft.items.push(user);
     audit(log, { id: null, name: "Sistema" }, "admin_entorno_creado", user.id, cfg.username);
@@ -127,7 +128,7 @@ export async function login(input: { username: string; password: string }, ip: s
 
   // Only after proving the password do we reveal the account's status.
   const { positions, settings } = await db.read(["positions", "settings"]);
-  const access = evaluateAccess(user, positions.items, todayIn(settings.timezone));
+  const access = evaluateAccess(user, positions.items, todayIn(settings.timezone), { staffLogin: settings.staffLogin });
   if (!access.ok) {
     const suffix = access.startDate ? ` Inicia el ${access.startDate}.` : "";
     throw new HttpError(403, ACCESS_DENIAL_MESSAGES[access.reason] + suffix, `access_${access.reason}`);
@@ -226,6 +227,7 @@ export async function register(input: RegisterInput, ip: string): Promise<{ noti
       lastLoginAt: null,
       monthlySalary: null,
       transportAllowance: false,
+      adminScope: "total",
     };
     users.items.push(user);
     const actor = { id: user.id, name: user.displayName };
@@ -333,6 +335,7 @@ export async function setupFirstAdmin(
       lastLoginAt: null,
       monthlySalary: null,
       transportAllowance: false,
+      adminScope: "total",
     };
     users.items.push(user);
     audit(log, { id: user.id, name: user.displayName }, "admin_inicial_creado", user.id);

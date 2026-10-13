@@ -11,6 +11,8 @@ next-env.d.ts
 .data/
 .env
 .env*.local
+# team roster with personal names (public repo)
+*.local.json
 !.env.example
 
 # tests

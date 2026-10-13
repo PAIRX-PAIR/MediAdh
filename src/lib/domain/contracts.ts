@@ -41,8 +41,11 @@ export function canAssignNewContract(position: Position, today: string): boolean
   return status === "vacante" || status === "vencido" || status === "terminado";
 }
 
+/** total = gerencia y administración; gestion = coordinación y asistencia (sin configuración, equipo ni sueldos). */
+export type AdminScope = "total" | "gestion";
+
 export type AccessDecision =
-  | { ok: true; position: Position | null; isAdmin: boolean }
+  | { ok: true; position: Position | null; isAdmin: boolean; scope: AdminScope | null }
   | { ok: false; reason: AccessDenialReason; startDate?: string };
 
 export type AccessDenialReason =
@@ -50,25 +53,29 @@ export type AccessDenialReason =
   | "rejected"
   | "disabled"
   | "no_contract"
-  | "contract_not_started";
+  | "contract_not_started"
+  | "board_only";
 
 /**
  * Single source of truth for "may this account use the app right now".
  * Called on login AND on every authenticated request, so an expired contract
  * or a disabled account loses access immediately, even with a live session.
  */
-export function evaluateAccess(user: User, positions: Position[], today: string): AccessDecision {
+export function evaluateAccess(user: User, positions: Position[], today: string, opts: { staffLogin?: boolean } = {}): AccessDecision {
   if (user.status === "pending") return { ok: false, reason: "pending" };
   if (user.status === "rejected") return { ok: false, reason: "rejected" };
   if (user.status === "disabled") return { ok: false, reason: "disabled" };
 
-  if (user.kind === "admin") return { ok: true, position: null, isAdmin: true };
+  if (user.kind === "admin") return { ok: true, position: null, isAdmin: true, scope: user.adminScope ?? "total" };
 
   // A person may have an expired contract in one position and a new one in
   // another, so evaluate every contract they hold and keep the best.
   const held = positions.filter((p) => p.contract?.userId === user.id);
   const active = held.find((p) => isContractActive(contractStatus(p.contract, today)));
-  if (active) return { ok: true, position: active, isAdmin: active.grantsAdmin };
+  if (active?.grantsAdmin) return { ok: true, position: active, isAdmin: true, scope: "gestion" };
+  // Operarios see their queue on the public board unless the workshop lets them sign in.
+  if (active && opts.staffLogin === false) return { ok: false, reason: "board_only" };
+  if (active) return { ok: true, position: active, isAdmin: false, scope: null };
 
   const scheduled = held.find((p) => contractStatus(p.contract, today) === "programado");
   if (scheduled?.contract) {
@@ -83,4 +90,5 @@ export const ACCESS_DENIAL_MESSAGES: Record<AccessDenialReason, string> = {
   disabled: "Tu cuenta está desactivada. Habla con el coordinador.",
   no_contract: "No tienes un contrato vigente. El acceso se habilita cuando el coordinador registre tu contrato.",
   contract_not_started: "Tu contrato aún no ha iniciado.",
+  board_only: "Los operarios no inician sesión: su cola de trabajo está en el tablero del taller. Pídele el enlace al coordinador.",
 };

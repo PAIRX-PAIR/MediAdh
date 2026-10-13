@@ -24,6 +24,7 @@ Importa `PAIRX-PAIR/MediAdh` en Vercel (framework Next.js, Node 24). Variables d
 | `ADMIN_BOOTSTRAP_USERNAME` | `judago` |
 | `ADMIN_BOOTSTRAP_NAME` | nombre visible |
 | `ADMIN_BOOTSTRAP_PASSWORD_HASH` | el hash de `.env.local` **sin** las barras `\` (en Vercel va tal cual: `scrypt$131072$8$1$...`) |
+| `ADMIN_BOOTSTRAP_2_USERNAME`, `_2_NAME`, `_2_PASSWORD_HASH` | segundo administrador (`ax95`), igual que el anterior |
 | `ANDROID_PACKAGE_ID`, `ANDROID_CERT_SHA256` | ver `docs/APK.md` (cuando generes el APK) |
 
 `SETUP_KEY` ya no hace falta si usas el administrador declarado. Si prefieres `/setup`, defínela, crea el admin y bórrala.
@@ -36,11 +37,21 @@ Importa `PAIRX-PAIR/MediAdh` en Vercel (framework Next.js, Node 24). Variables d
 
 Vercel → Firewall → regla de límite de tasa para `/api/auth/` (por ejemplo 10 peticiones por minuto por IP). Protege el inicio de sesión y el registro antes de que lleguen a la base de datos.
 
-## 5. Primer ingreso
+## 5. Equipo inicial (tú, una vez)
 
-Entra con `judago`. La app crea la cuenta, pide aceptar la política de datos y queda lista. Luego **borra** las tres variables `ADMIN_BOOTSTRAP_*` en Vercel y vuelve a desplegar. En Ajustes completa: datos legales de la empresa, tarifas por hora, calendario y la tabla del IPC.
+Los nombres del equipo no van en el código (el repositorio es público): están en `equipo.local.json`, que no se sube. Con las variables de producción en `.env.local` (`DATA_BACKEND=github`, `GITHUB_DATA_REPO`, `GITHUB_DATA_TOKEN`) ejecuta:
 
-## 6. Verificación
+```bash
+npm run equipo:cargar
+```
+
+Crea a cada persona en su puesto. Los operarios quedan sin acceso: ven su cola en el tablero (Cola → Tablero de operarios). Coordinación y asistencia (con el campo `usuario` en el archivo) reciben su contraseña temporal desde Equipo → «Restablecer contraseña».
+
+## 6. Primer ingreso
+
+Entra con `judago` (y `ax95`). La app crea la cuenta, pide aceptar la política de datos y queda lista. Luego **borra** las variables `ADMIN_BOOTSTRAP_*` en Vercel y vuelve a desplegar. Los datos de la empresa, el horario y las reglas del cotizador ya vienen cargados; falta poner la tarifa de cada máquina, los sueldos (Nómina) y la tabla del IPC.
+
+## 7. Verificación
 
 - `https://tu-dominio/api/public` responde JSON.
 - `https://tu-dominio/manifest.webmanifest` y `/icons/512` cargan.

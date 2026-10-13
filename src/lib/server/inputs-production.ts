@@ -99,6 +99,7 @@ export const orderInput = z.object({
   title: requiredText(140),
   description: longText(4000),
   difficulty: difficultyInput.default(1),
+  urgent: z.boolean().default(false),
   quantity: z.number().int().min(1).max(1_000_000).default(1),
   condition: longText(1000),
   receivedAt: z.union([z.iso.datetime({ offset: true }), z.null()]).default(null),
@@ -116,6 +117,7 @@ export const orderPatchInput = z
     title: requiredText(140),
     description: text(4000),
     difficulty: difficultyInput,
+    urgent: z.boolean(),
     quantity: z.number().int().min(1).max(1_000_000),
     condition: text(1000),
     receivedAt: z.iso.datetime({ offset: true }),
@@ -169,6 +171,7 @@ const quoteLabor = z.object({
   description: longText(200),
   hours,
   rate: z.union([money, z.null()]).default(null),
+  machineId: nullableId.default(null),
 });
 
 export const quoteInput = z.object({
@@ -180,6 +183,7 @@ export const quoteInput = z.object({
   materials: z.array(quoteMaterial).max(100).default([]),
   labor: z.array(quoteLabor).max(40).default([]),
   difficulty: difficultyInput.default(1),
+  urgent: z.boolean().default(false),
   marginPct: z.union([z.number().min(0).max(500), z.null()]).default(null),
   ivaPct: z.union([z.number().min(0).max(100), z.null()]).default(null),
   validDays: z.union([z.number().int().min(1).max(365), z.null()]).default(null),
@@ -196,6 +200,7 @@ export const quotePatchInput = z
     materials: z.array(quoteMaterial).max(100),
     labor: z.array(quoteLabor).max(40),
     difficulty: difficultyInput,
+    urgent: z.boolean(),
     marginPct: z.number().min(0).max(500),
     ivaPct: z.number().min(0).max(100),
     validDays: z.number().int().min(1).max(365),

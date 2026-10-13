@@ -24,6 +24,7 @@ function fromOrder(o: OrderView): OrderInput {
     title: o.title,
     description: o.description,
     difficulty: o.difficulty,
+    urgent: o.urgent,
     quantity: o.intake.quantity,
     condition: o.intake.condition,
     due: o.due,
@@ -50,6 +51,7 @@ export function OrderFormModal({ order, onClose, onSaved }: { order?: OrderView 
           title: "",
           description: "",
           difficulty: 1,
+          urgent: false,
           quantity: 1,
           condition: "",
           due: { date: addDays(data.today, 5), time: "17:00" },
@@ -74,7 +76,7 @@ export function OrderFormModal({ order, onClose, onSaved }: { order?: OrderView 
       else hoursByProcess[w.process] = (hoursByProcess[w.process] ?? 0) + w.plannedHours;
     }
     const others = prod.asOrders.filter((o) => o.id !== order?.id);
-    return canCommit(others, { hoursByMachine, hoursByProcess, dueDate: form.due.date, dueTime: form.due.time, difficulty: form.difficulty }, prod.ctx);
+    return canCommit(others, { hoursByMachine, hoursByProcess, dueDate: form.due.date, dueTime: form.due.time, difficulty: form.difficulty, urgent: form.urgent }, prod.ctx);
   }, [form, prod, order?.id, locked]);
 
   const valid = form.title.trim() && (form.clientId || form.clientName?.trim()) && form.quantity >= 1;
@@ -171,11 +173,17 @@ export function OrderFormModal({ order, onClose, onSaved }: { order?: OrderView 
               onChange={(v) => set("difficulty", Number(v) as Difficulty)}
               options={[
                 { value: "1", label: "Normal" },
-                { value: "2", label: "Complicado" },
-                { value: "3", label: "Urgente" },
+                { value: "2", label: "Mayor" },
+                { value: "3", label: "Muy alta" },
               ]}
               className="[&>button]:flex-1 [&>button]:justify-center"
             />
+            <label className="mt-3 flex items-start gap-3 rounded-lg border border-line p-2.5 text-sm text-ink-soft">
+              <input type="checkbox" checked={form.urgent ?? false} onChange={(e) => set("urgent", e.target.checked)} className="mt-0.5 size-5 accent-[var(--color-glow)]" />
+              <span>
+                <strong className="text-ink">Urgente</strong>: se baja la pieza montada y esta orden pasa primero en la cola.
+              </span>
+            </label>
           </div>
           <div className="rounded-xl border border-line bg-night/50 p-4">
             <Field label="Precio pactado (antes de IVA)" hint="Si viene de una cotización aprobada, ya está lleno.">

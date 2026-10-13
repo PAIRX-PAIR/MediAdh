@@ -11,9 +11,9 @@ test.describe("páginas públicas", () => {
     await expect(page.getByRole("heading", { level: 3, name: "Cada pieza entra con folio, fotos y estado" })).toBeAttached();
     await page.getByRole("link", { name: "Iniciar sesión" }).first().click();
     await expect(page).toHaveURL(/acceso=1/);
-    await expect(page.getByRole("dialog").getByRole("tab", { name: "Crear cuenta" })).toBeVisible();
-    await page.getByRole("dialog").getByRole("tab", { name: "Crear cuenta" }).click();
-    await expect(page.getByRole("dialog").getByLabel("Nombre completo")).toBeVisible();
+    // S.M.I.: registration closed, only admins create accounts.
+    await expect(page.getByRole("dialog").getByRole("heading", { name: "Iniciar sesión" })).toBeVisible();
+    await expect(page.getByRole("dialog").getByRole("tab", { name: "Crear cuenta" })).toHaveCount(0);
     expect(errors.filter((e) => !/favicon|webgl/i.test(e))).toEqual([]);
   });
 

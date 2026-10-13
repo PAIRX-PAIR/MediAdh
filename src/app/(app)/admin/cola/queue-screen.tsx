@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { ChartFrame, ColumnChart } from "@/components/charts/charts";
 import { useSync } from "@/components/providers/sync-provider";
 import { CommitVerdict } from "@/components/production/commit-verdict";
+import { BoardLinkCard } from "@/components/production/board-link";
 import { MachineFormModal } from "@/components/production/machine-form";
 import { LEVEL, OccupancyList } from "@/components/production/occupancy";
 import { PriorityPanel } from "@/components/production/priority-panel";
@@ -34,13 +35,17 @@ export function QueueScreen() {
       <PageHeader
         eyebrow="Producción"
         title="Cola por máquina"
-        description="Programación automática por fecha de entrega con la capacidad real de cada máquina (jornada, sábados, festivos y paros). Las máquinas inactivas se ven, pero no reciben trabajo."
+        description="Programación automática por fecha de entrega con la capacidad real de cada máquina (horario por turnos, festivos y paros). Las máquinas inactivas se ven, pero no reciben trabajo."
         actions={
-          <Button variant="secondary" icon={<Plus className="size-4" />} onClick={() => setEditing("new")}>
-            Agregar máquina
-          </Button>
+          data.me.scope === "total" ? (
+            <Button variant="secondary" icon={<Plus className="size-4" />} onClick={() => setEditing("new")}>
+              Agregar máquina-herramienta
+            </Button>
+          ) : undefined
         }
       />
+
+      <BoardLinkCard />
 
       <section aria-labelledby="ocupacion-title">
         <SectionTitle>

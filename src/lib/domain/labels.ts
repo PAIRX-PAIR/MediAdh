@@ -90,6 +90,7 @@ export const PROCESS_LABEL: Record<Process, string> = {
   prensa: "Prensa",
   soldadura: "Soldadura",
   banco: "Mecánica de banco",
+  pintura: "Pintura",
 };
 
 export const MACHINE_STATE_LABEL: Record<MachineState, string> = {
@@ -102,7 +103,7 @@ export const CLIENT_KIND_LABEL: Record<ClientKind, string> = { empresa: "Empresa
 
 export const CLIENT_TIER_LABEL: Record<number, string> = { 1: "Normal", 2: "Frecuente", 3: "Estratégico" };
 
-export const DIFFICULTY_LABEL: Record<Difficulty, string> = { 1: "Normal", 2: "Complicado (+15 %)", 3: "Urgente (+25 %)" };
+export const DIFFICULTY_LABEL: Record<Difficulty, string> = { 1: "Normal", 2: "Dificultad mayor", 3: "Dificultad muy alta" };
 
 export const QUOTE_STATUS_LABEL: Record<QuoteStatus | "vencida", string> = {
   borrador: "Borrador",

@@ -1,7 +1,7 @@
 import "server-only";
 import { diffFields } from "@/lib/domain/diff";
 import { CLAIM_KIND_LABEL, PROCESS_LABEL } from "@/lib/domain/labels";
-import { ORDER_STATUS_LABEL, canTransition, statusFromWork } from "@/lib/domain/lifecycle";
+import { ORDER_STATUS_LABEL, canTransition, statusFromWork, warrantyStatus } from "@/lib/domain/lifecycle";
 import { OPEN_ORDER_STATUSES, remainingHours } from "@/lib/domain/planning";
 import type {
   Claim,
@@ -52,6 +52,7 @@ export interface OrderInput {
   title: string;
   description: string;
   difficulty: Difficulty;
+  urgent?: boolean;
   quantity: number;
   condition: string;
   receivedAt: string | null;
@@ -71,6 +72,7 @@ const ORDER_LABELS = {
   description: "Descripción",
   status: "Estado",
   difficulty: "Dificultad",
+  urgent: "Urgente",
   due: "Entrega",
   price: "Precio",
   finalPrice: "Precio final",
@@ -146,8 +148,9 @@ function buildSupplies(inputs: SupplyInput[], previous: SupplyLine[]): SupplyLin
 }
 
 /** Task priority shown to the worker, derived from the order. */
-export function taskPriorityFor(order: Pick<Order, "difficulty" | "due" | "status">, today: string): TaskPriority {
-  if (order.difficulty === 3 || order.status === "garantia") return "urgente";
+export function taskPriorityFor(order: Pick<Order, "difficulty" | "due" | "status" | "urgent">, today: string): TaskPriority {
+  if (order.urgent || order.status === "garantia") return "urgente";
+  if (order.difficulty === 3) return "alta";
   if (order.due && daysBetween(today, order.due.date) <= 1) return "alta";
   if (order.difficulty === 2) return "alta";
   return "normal";
@@ -314,6 +317,7 @@ export function createOrderIn(docs: OrderDocs, principal: Principal, input: Orde
     description: input.description,
     status: "recibida",
     difficulty: input.difficulty,
+    urgent: input.urgent ?? false,
     intake: { receivedAt: input.receivedAt ?? now, quantity: input.quantity, condition: input.condition },
     intakePhotoIds: [],
     drawingIds: extra.drawingIds ?? [],
@@ -363,6 +367,7 @@ export async function updateOrder(principal: Principal, id: string, patch: Parti
     if (patch.title !== undefined) order.title = patch.title;
     if (patch.description !== undefined) order.description = patch.description;
     if (patch.difficulty !== undefined) order.difficulty = patch.difficulty;
+    if (patch.urgent !== undefined) order.urgent = patch.urgent;
     if (patch.quantity !== undefined) order.intake.quantity = patch.quantity;
     if (patch.condition !== undefined) order.intake.condition = patch.condition;
     if (patch.receivedAt) order.intake.receivedAt = patch.receivedAt;
@@ -526,6 +531,11 @@ export async function orderAction(principal: Principal, id: string, input: Order
       }
       case "claim": {
         if (!["entregada", "cerrada"].includes(from)) throw conflict("Los reclamos se registran sobre trabajos entregados.");
+        if (input.kind === "garantia") {
+          const w = warrantyStatus(order, docs.settings.production.warrantyDays, principal.settings.timezone);
+          if (w.weldingOnly) throw conflict("Los trabajos de soldadura no tienen garantía. Si el cliente devuelve la pieza, regístralo como devolución.", "no_warranty");
+          if (!w.until || principal.today > w.until) throw conflict(`La garantía venció${w.until ? ` el ${w.until}` : ""}. Puedes registrarlo como devolución.`, "warranty_expired");
+        }
         const claim: Claim = { id: newId(), kind: input.kind, at: now, description: input.description, resolvedAt: null, resolution: null, createdBy: principal.user.id };
         order.claims.push(claim);
         order.closedAt = null;
@@ -626,6 +636,7 @@ export async function createHistoricalOrder(principal: Principal, input: Histori
       description: input.description,
       status: "cerrada",
       difficulty: 1,
+      urgent: false,
       intake: { receivedAt: received, quantity: input.quantity, condition: "" },
       intakePhotoIds: [],
       drawingIds: [],

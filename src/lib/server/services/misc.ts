@@ -62,6 +62,7 @@ export interface SettingsPatch {
   workshopName?: string;
   timezone?: string;
   registrationOpen?: boolean;
+  staffLogin?: boolean;
   /** "" clears the code; a value sets a new one. */
   registrationCode?: string;
   maxPendingRegistrations?: number;
@@ -90,6 +91,7 @@ export async function updateSettings(principal: Principal, patch: SettingsPatch)
     if (patch.workshopName !== undefined) settings.workshopName = patch.workshopName;
     if (patch.timezone !== undefined) settings.timezone = patch.timezone;
     if (patch.registrationOpen !== undefined) settings.registrationOpen = patch.registrationOpen;
+    if (patch.staffLogin !== undefined) settings.staffLogin = patch.staffLogin;
     if (codeHash !== undefined) settings.registrationCodeHash = codeHash;
     if (patch.maxPendingRegistrations !== undefined) settings.maxPendingRegistrations = patch.maxPendingRegistrations;
     if (patch.legal) settings.legal = { ...settings.legal, ...patch.legal };

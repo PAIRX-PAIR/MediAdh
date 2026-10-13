@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { PrintButton } from "@/components/production/print-button";
 import { DIFFICULTY_LABEL, PROCESS_LABEL, formatDate } from "@/lib/domain/labels";
 import { formatNit } from "@/lib/domain/nit";
-import { formatCop, quoteTotals, quoteValidUntil } from "@/lib/domain/quote";
+import { formatCop, quoteTotals, quoteValidUntil, warrantyText } from "@/lib/domain/quote";
 import { getPrincipal } from "@/lib/server/auth/principal";
 import { getDb } from "@/lib/server/store";
 
@@ -20,6 +20,15 @@ export default async function PrintQuote({ params }: { params: Promise<{ id: str
   const client = clients.items.find((c) => c.id === quote.clientId);
   const t = quoteTotals(quote);
   const legal = settings.legal;
+  // Client-facing prices: each line carries its share of the margin, so the lines add up to the subtotal.
+  const factor = t.cost > 0 ? t.subtotal / t.cost : 1;
+  const rows = [
+    ...quote.materials.map((m) => ({ id: m.id, label: m.description, qty: String(m.quantity), cost: m.quantity * m.unitCost, units: m.quantity })),
+    ...quote.labor.map((l) => ({ id: l.id, label: `${PROCESS_LABEL[l.process]}${l.description ? ` · ${l.description}` : ""}`, qty: `${l.hours} h`, cost: l.hours * l.rate, units: l.hours })),
+  ].map((r) => ({ ...r, value: Math.round(r.cost * factor) }));
+  const drift = t.subtotal - rows.reduce((sum, r) => sum + r.value, 0);
+  if (rows.length > 0) rows[rows.length - 1]!.value += drift;
+  const warranty = warrantyText(quote.labor, settings.production.warrantyDays);
   const issued = quote.issuedAt ?? quote.createdAt;
 
   return (
@@ -62,6 +71,7 @@ export default async function PrintQuote({ params }: { params: Promise<{ id: str
             <p className="font-semibold">{quote.title}</p>
             <p>
               Cantidad: {quote.quantity} · {DIFFICULTY_LABEL[quote.difficulty]}
+              {quote.urgent ? " · Urgente" : ""}
             </p>
             {quote.description && <p className="mt-1 whitespace-pre-wrap text-[#3b4a66]">{quote.description}</p>}
           </div>
@@ -77,35 +87,18 @@ export default async function PrintQuote({ params }: { params: Promise<{ id: str
             </tr>
           </thead>
           <tbody>
-            {quote.materials.map((m) => (
-              <tr key={m.id} className="border-b border-[#e3e8f2]">
-                <td className="py-2">{m.description}</td>
-                <td className="py-2 text-right tabular-nums">{m.quantity}</td>
-                <td className="py-2 text-right tabular-nums">{formatCop(m.unitCost)}</td>
-                <td className="py-2 text-right tabular-nums">{formatCop(Math.round(m.quantity * m.unitCost))}</td>
-              </tr>
-            ))}
-            {quote.labor.map((l) => (
-              <tr key={l.id} className="border-b border-[#e3e8f2]">
-                <td className="py-2">
-                  {PROCESS_LABEL[l.process]}
-                  {l.description ? ` · ${l.description}` : ""}
-                </td>
-                <td className="py-2 text-right tabular-nums">{l.hours} h</td>
-                <td className="py-2 text-right tabular-nums">{formatCop(l.rate)}</td>
-                <td className="py-2 text-right tabular-nums">{formatCop(Math.round(l.hours * l.rate))}</td>
+            {rows.map((r) => (
+              <tr key={r.id} className="border-b border-[#e3e8f2]">
+                <td className="py-2">{r.label}</td>
+                <td className="py-2 text-right tabular-nums">{r.qty}</td>
+                <td className="py-2 text-right tabular-nums">{formatCop(r.units > 0 ? Math.round(r.value / r.units) : r.value)}</td>
+                <td className="py-2 text-right tabular-nums">{formatCop(r.value)}</td>
               </tr>
             ))}
           </tbody>
         </table>
 
         <dl className="ml-auto mt-6 w-72 text-sm tabular-nums">
-          {t.surcharge > 0 && (
-            <div className="flex justify-between py-1">
-              <dt>Recargo por dificultad ({Math.round(t.surchargePct * 100)} %)</dt>
-              <dd>{formatCop(t.surcharge)}</dd>
-            </div>
-          )}
           <div className="flex justify-between py-1">
             <dt>Subtotal</dt>
             <dd>{formatCop(t.subtotal)}</dd>
@@ -132,6 +125,10 @@ export default async function PrintQuote({ params }: { params: Promise<{ id: str
             <p className="whitespace-pre-wrap">{quote.notes}</p>
           </section>
         )}
+        <section className="mt-8 text-sm">
+          <p className="text-xs font-semibold uppercase tracking-widest text-[#3b4a66]">Garantía</p>
+          <p>{warranty}</p>
+        </section>
         <footer className="mt-12 border-t border-[#c9d3e6] pt-4 text-xs text-[#3b4a66]">
           Precios en pesos colombianos. Esta cotización no es una factura. Tratamos los datos de contacto según nuestra política de tratamiento de datos personales (Ley 1581 de
           2012).

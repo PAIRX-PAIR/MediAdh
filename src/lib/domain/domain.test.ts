@@ -8,7 +8,7 @@ import { canTransition, dueReminders, isLate, shouldAutoClose, statusFromWork } 
 import { formatNit, parseNit, verificationDigit } from "./nit";
 import { dayHours, liquidate, quincenaOf, shiftQuincena } from "./payroll";
 import { canCommit, machineHoursOn, nextUp, occupancy, planOrders, prioritize, type PlanContext } from "./planning";
-import { quoteDisplayStatus, quoteTotals } from "./quote";
+import { extraMarginPct, quoteDisplayStatus, quoteTotals } from "./quote";
 import type { Machine, Order, WorkItem } from "./schema";
 import { zonedInstant } from "./time";
 
@@ -21,6 +21,7 @@ describe("NIT y dígito de verificación DIAN", () => {
   it("calcula el DV de NITs conocidos", () => {
     expect(verificationDigit("800197268")).toBe(4); // DIAN
     expect(verificationDigit("890903938")).toBe(8); // Bancolombia
+    expect(verificationDigit("901469738")).toBe(9); // S.M.I.
     expect(verificationDigit("899999068")).toBe(1); // Ecopetrol
     expect(verificationDigit("800.197.268")).toBe(4);
   });
@@ -137,25 +138,28 @@ describe("cotizador", () => {
     quantity: 4,
   };
 
-  it("suma costo, recargo por dificultad, utilidad e IVA en ese orden", () => {
-    const normal = quoteTotals({ ...base, difficulty: 1 });
+  it("suma costo, utilidad (base + dificultad + urgencia) e IVA en ese orden", () => {
+    const normal = quoteTotals({ ...base, marginPct: 35 });
     expect(normal.materials).toBe(100_000);
     expect(normal.labor).toBe(300_000);
     expect(normal.cost).toBe(400_000);
-    expect(normal.surcharge).toBe(0);
-    expect(normal.margin).toBe(120_000);
-    expect(normal.subtotal).toBe(520_000);
-    expect(normal.iva).toBe(98_800);
-    expect(normal.total).toBe(618_800);
-    expect(normal.unitPrice).toBe(130_000);
+    expect(normal.margin).toBe(140_000);
+    expect(normal.subtotal).toBe(540_000);
+    expect(normal.iva).toBe(102_600);
+    expect(normal.total).toBe(642_600);
+    expect(normal.unitPrice).toBe(135_000);
     expect(normal.hoursByProcess).toEqual({ torno: 3, fresadora: 1.5 });
 
-    const complicated = quoteTotals({ ...base, difficulty: 2 });
-    expect(complicated.surcharge).toBe(60_000);
-    expect(complicated.subtotal).toBe(598_000);
-    const urgent = quoteTotals({ ...base, difficulty: 3 });
-    expect(urgent.surcharge).toBe(100_000);
-    expect(urgent.total).toBe(Math.round(650_000 * 1.19));
+    const rules = { difficultyMarginPct: 15, highDifficultyMarginPct: 25, urgencyMarginPct: 125 };
+    expect(extraMarginPct(2, false, rules)).toBe(15);
+    expect(extraMarginPct(1, true, rules)).toBe(125);
+    expect(extraMarginPct(2, true, rules)).toBe(140);
+    const difficult = quoteTotals({ ...base, marginPct: 35, extraMarginPct: 15 });
+    expect(difficult).toMatchObject({ marginPct: 50, baseMargin: 140_000, extraMargin: 60_000, subtotal: 600_000 });
+    // Urgencia: se baja la pieza montada; la utilidad sube a 35 + 125 = 160 %.
+    const urgent = quoteTotals({ ...base, marginPct: 35, extraMarginPct: 125 });
+    expect(urgent.subtotal).toBe(1_040_000);
+    expect(urgent.total).toBe(Math.round(1_040_000 * 1.19));
   });
 
   it("marca como vencida una cotización enviada fuera de vigencia", () => {
@@ -204,6 +208,7 @@ function order(over: Partial<Order> & Pick<Order, "id">): Order {
     description: "",
     status: "recibida",
     difficulty: 1,
+    urgent: false,
     intake: { receivedAt: "2026-10-10T15:00:00.000Z", quantity: 1, condition: "" },
     intakePhotoIds: [],
     drawingIds: [],

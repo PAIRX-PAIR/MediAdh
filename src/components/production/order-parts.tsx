@@ -78,11 +78,12 @@ export function OrderCard({
       scroll={false}
       className="hud-panel group relative flex flex-col gap-2 overflow-hidden p-4 transition-colors hover:border-glow/50 active:scale-[0.995]"
     >
-      {order.difficulty === 3 && <span className="hazard-stripe absolute inset-x-0 top-0 h-1" aria-hidden />}
+      {order.urgent && <span className="hazard-stripe absolute inset-x-0 top-0 h-1" aria-hidden />}
       <div className="flex flex-wrap items-center gap-2">
         <span className="tabular font-mono text-sm font-semibold text-glow">{order.folio}</span>
         <OrderStatusChip status={order.status} />
-        {order.difficulty > 1 && <Chip tone={order.difficulty === 3 ? "urgent" : "pending"}>{DIFFICULTY_LABEL[order.difficulty].split(" (")[0]}</Chip>}
+        {order.urgent && <Chip tone="urgent">Urgente</Chip>}
+        {order.difficulty > 1 && <Chip tone="pending">{DIFFICULTY_LABEL[order.difficulty]}</Chip>}
         {order.invoice.pending && (
           <Chip tone="urgent">
             <Receipt className="size-3" aria-hidden /> Facturar

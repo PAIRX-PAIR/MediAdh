@@ -35,7 +35,7 @@ async function principalFor(username: string): Promise<Principal> {
   const today = todayIn(settings.timezone);
   const access = evaluateAccess(user, positions.items, today);
   if (!access.ok) throw new Error(`no access: ${access.reason}`);
-  return { user, position: access.position, isAdmin: access.isAdmin, settings, today, claims: { sub: user.id, sv: 0, iat: 0, exp: 0 }, incomplete: false };
+  return { user, position: access.position, isAdmin: access.isAdmin, scope: access.scope, settings, today, claims: { sub: user.id, sv: 0, iat: 0, exp: 0 }, incomplete: false };
 }
 
 async function setup() {
@@ -65,6 +65,7 @@ async function setup() {
       lastLoginAt: null,
       monthlySalary: null,
       transportAllowance: false,
+      adminScope: "total",
     });
   });
   const admin = await principalFor("jefe");
@@ -175,14 +176,14 @@ describe("orden de trabajo → tareas por puesto", () => {
     const { order: edited } = await orders.updateOrder(admin, order.id, {
       title: "Eje de transmisión rev. B",
       due: { date: "2099-01-12", time: "10:00" },
-      workItems: [{ id: order.workItems[0]!.id, process: "torno", machineId: "wkt", description: "", plannedHours: 6 }],
+      workItems: [{ id: order.workItems[0]!.id, process: "fresadora", machineId: "fresadora", description: "", plannedHours: 6 }],
     });
     const entry = edited.history.at(-1)!;
     expect(entry).toMatchObject({ actorName: "Jefe", action: "Editó la orden" });
     expect(entry.changes.map((c) => c.label)).toEqual(expect.arrayContaining(["Trabajo", "Entrega", "Ruta de procesos"]));
     const { tasks } = await db.read(["tasks"]);
     expect(tasks.items.filter((t) => t.orderId === order.id)).toHaveLength(1);
-    expect(tasks.items.find((t) => t.orderId === order.id)!.positionId).toBe("tornero-2");
+    expect(tasks.items.find((t) => t.orderId === order.id)!.positionId).toBe("fresadora");
   });
 });
 
@@ -254,18 +255,21 @@ describe("cotizador → orden de trabajo", () => {
       quantity: 1,
       materials: [{ description: "Acero", quantity: 1, unitCost: 100_000 }],
       labor: [{ process: "torno", description: "", hours: 4, rate: null }],
-      difficulty: 3,
+      difficulty: 2,
+      urgent: true,
       marginPct: 20,
       ivaPct: null,
       validDays: null,
       notes: "",
     });
-    expect(quote).toMatchObject({ folio: "COT-0001", ivaPct: 19, validDays: 15 });
+    // Dificultad mayor (+15) y urgencia (+125) se suman a la utilidad base.
+    expect(quote).toMatchObject({ folio: "COT-0001", ivaPct: 19, validDays: 15, extraMarginPct: 140 });
     expect(quote.labor[0]!.rate).toBe(50_000);
     await quotes.setQuoteStatus(admin, quote.id, "enviada");
     const { order } = await quotes.approveQuote(admin, quote.id, { due: { date: "2099-02-01", time: "12:00" }, condition: "", machines: {} });
-    // (100.000 + 200.000) × 1,25 × 1,20 = 450.000 antes de IVA.
-    expect(order.price).toBe(450_000);
+    // (100.000 + 200.000) × (1 + 0,20 + 0,15 + 1,25) = 780.000 antes de IVA.
+    expect(order.price).toBe(780_000);
+    expect(order.urgent).toBe(true);
     expect(order.workItems[0]).toMatchObject({ process: "torno", plannedHours: 4 });
     expect(order.workItems[0]!.machineId).not.toBeNull();
     expect(order.supplies[0]).toMatchObject({ description: "Acero", unitCost: 100_000 });
@@ -387,5 +391,91 @@ describe("almacenamiento particionado", () => {
     expect(after.files.get(paths[0]!)!.text).toBe(oldText);
     const { orders: merged } = await db.read(["orders"]);
     expect(merged.items.map((o) => o.folio).sort()).toEqual(["OT-0001", "OT-0002", "OT-0003"]);
+  });
+});
+
+describe("garantía de S.M.I.", () => {
+  it("90 días desde la entrega; la soldadura no tiene garantía", async () => {
+    const { admin } = await setup();
+    const { order: welding } = await orders.createOrder(
+      admin,
+      baseOrder({ workItems: [{ process: "soldadura", machineId: "soldadura", description: "Recargue", plannedHours: 2 }] }),
+    );
+    await orders.orderAction(admin, welding.id, { action: "deliver", satisfaction: null, finalPrice: null });
+    await expect(orders.orderAction(admin, welding.id, { action: "claim", kind: "garantia", description: "Se partió" })).rejects.toMatchObject({ code: "no_warranty" });
+    // A return can still be registered.
+    await orders.orderAction(admin, welding.id, { action: "claim", kind: "devolucion", description: "La devuelven" });
+
+    const { order } = await orders.createOrder(admin, baseOrder());
+    await orders.orderAction(admin, order.id, { action: "deliver", satisfaction: null, finalPrice: null });
+    await db.transact(["orders"], "entregada hace 91 días", ({ orders: list }) => {
+      list.items.find((o) => o.id === order.id)!.deliveredAt = new Date(Date.now() - 91 * 86_400_000).toISOString();
+    });
+    await expect(orders.orderAction(admin, order.id, { action: "claim", kind: "garantia", description: "Vibra" })).rejects.toMatchObject({ code: "warranty_expired" });
+  });
+});
+
+describe("operarios sin sesión y tablero del taller", () => {
+  it("los operarios no inician sesión; coordinación entra con acceso de gestión", async () => {
+    const { admin } = await setup();
+    const { users, positions } = await db.read(["users", "positions"]);
+    const tornero = users.items.find((u) => u.username === "tornero1")!;
+    expect(evaluateAccess(tornero, positions.items, admin.today, { staffLogin: false })).toMatchObject({ ok: false, reason: "board_only" });
+    expect(evaluateAccess(tornero, positions.items, admin.today, { staffLogin: true })).toMatchObject({ ok: true, scope: null });
+
+    await team.createAccount(admin, {
+      displayName: "Coordinador",
+      username: "coordinador",
+      tempPassword: "frase temporal segura",
+      phone: null,
+      kind: "staff",
+      positionId: "coordinador-produccion",
+      replaceCurrent: false,
+      startDate: admin.today,
+      endDate: null,
+      notes: null,
+    });
+    const after = await db.read(["users", "positions"]);
+    const coord = after.users.items.find((u) => u.username === "coordinador")!;
+    expect(evaluateAccess(coord, after.positions.items, admin.today, { staffLogin: false })).toMatchObject({ ok: true, isAdmin: true, scope: "gestion" });
+  });
+
+  it("registra un operario sin usuario ni contraseña", async () => {
+    const { admin } = await setup();
+    await team.createAccount(admin, {
+      displayName: "Ana Ejemplo Pérez",
+      username: "",
+      tempPassword: "",
+      phone: null,
+      kind: "staff",
+      positionId: "programador-cnc",
+      replaceCurrent: false,
+      startDate: admin.today,
+      endDate: null,
+      notes: null,
+    });
+    const { users } = await db.read(["users"]);
+    expect(users.items.find((u) => u.displayName === "Ana Ejemplo Pérez")!.username).toMatch(/^ana\.ejemplo\.perez\.[0-9a-f]{4}$/);
+  });
+
+  it("el tablero muestra la cola por operario sin clientes ni precios y exige el enlace secreto", async () => {
+    const { admin } = await setup();
+    const board = await import("./board");
+    await orders.createOrder(admin, baseOrder({ clientName: "Ingenio Secreto", price: 9_999_000, urgent: true }));
+    await expect(board.boardFor("cualquiera")).rejects.toMatchObject({ status: 404 });
+    const token = await board.boardToken(admin, false);
+    expect(await board.boardToken(admin, false)).toBe(token);
+    const view = await board.boardFor(token);
+    const henry = view.groups.find((g) => g.id === "tornero-1")!;
+    expect(henry.operator).toBe("Tornero Uno");
+    const pinacho = henry.machines.find((m) => m.id === "pinacho")!;
+    expect(pinacho.jobs[0]).toMatchObject({ folio: "OT-0001", urgent: true, hours: 6 });
+    const json = JSON.stringify(view);
+    expect(json).not.toContain("Ingenio Secreto");
+    expect(json).not.toContain("9999000");
+    // Rotating the link invalidates the old one.
+    const fresh = await board.boardToken(admin, true);
+    expect(fresh).not.toBe(token);
+    await expect(board.boardFor(token)).rejects.toMatchObject({ status: 404 });
   });
 });

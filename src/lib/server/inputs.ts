@@ -127,8 +127,10 @@ export const rejectInput = z.object({ reason: optionalText(300) });
 
 export const createAccountInput = z.object({
   displayName: requiredText(80),
-  username,
-  tempPassword: password,
+  /** Both empty for an operario without app access (generated, never used to sign in). */
+  username: z.union([username, z.literal("")]).default(""),
+  tempPassword: z.union([password, z.literal("")]).default(""),
+  adminScope: z.enum(["total", "gestion"]).default("total"),
   phone,
   kind: z.enum(["admin", "staff"]),
   positionId: z.union([entityId, z.null()]).default(null),
@@ -201,9 +203,13 @@ const productionSettingsPatch = z
     schedule: weekScheduleSchema,
     skipHolidays: z.boolean(),
     processRates: z
-      .object({ torno: money, fresadora: money, cepillo: money, cnc: money, prensa: money, soldadura: money, banco: money })
+      .object({ torno: money, fresadora: money, cepillo: money, cnc: money, prensa: money, soldadura: money, banco: money, pintura: money })
       .partial(),
     defaultMarginPct: z.number().min(0).max(500),
+    difficultyMarginPct: z.number().min(0).max(500),
+    highDifficultyMarginPct: z.number().min(0).max(500),
+    urgencyMarginPct: z.number().min(0).max(1000),
+    warrantyDays: z.number().int().min(0).max(3650),
     ivaPct: z.number().min(0).max(100),
     quoteValidDays: z.number().int().min(1).max(365),
     claimWindowDays: z.number().int().min(1).max(60),
@@ -230,6 +236,7 @@ export const settingsPatchInput = z
     workshopName: requiredText(60),
     timezone: z.string().min(1).max(60),
     registrationOpen: z.boolean(),
+    staffLogin: z.boolean(),
     registrationCode: z.string().max(64),
     maxPendingRegistrations: z.number().int().min(1).max(200),
     legal: legalPatch,

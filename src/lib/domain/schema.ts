@@ -47,6 +47,11 @@ export const userSchema = z.object({
   monthlySalary: z.number().min(0).nullable().default(null),
   /** Receives the auxilio de transporte with each payment. */
   transportAllowance: z.boolean().default(false),
+  /**
+   * Admin accounts only. total = gerencia/administración (todo); gestion =
+   * coordinación y asistencia (operación completa, sin configuración, equipo ni sueldos).
+   */
+  adminScope: z.enum(["total", "gestion"]).default("total"),
 });
 export type User = z.infer<typeof userSchema>;
 
@@ -276,7 +281,7 @@ export type AuditEntry = z.infer<typeof auditEntrySchema>;
 /* ───────────── Producción: máquinas, clientes, órdenes de trabajo, cotizaciones ───────────── */
 
 /** Processes quoted and scheduled by the workshop. Each machine belongs to one. */
-export const PROCESSES = ["torno", "fresadora", "cepillo", "cnc", "prensa", "soldadura", "banco"] as const;
+export const PROCESSES = ["torno", "fresadora", "cepillo", "cnc", "prensa", "soldadura", "banco", "pintura"] as const;
 export type Process = (typeof PROCESSES)[number];
 
 export const MACHINE_STATES = ["activa", "inactiva", "mantenimiento"] as const;
@@ -411,6 +416,8 @@ export const orderSchema = z.object({
   description: z.string().default(""),
   status: z.enum(ORDER_STATUSES),
   difficulty: difficulty.default(1),
+  /** Urgencia: se baja la pieza que estaba montada; va primero en la cola. */
+  urgent: z.boolean().default(false),
   intake: z.object({
     receivedAt: isoDateTime,
     quantity: z.number().int().min(1),
@@ -484,6 +491,8 @@ export const quoteLaborSchema = z.object({
   hours: z.number().min(0),
   /** COP per hour, copied from the process rate when the line was added. */
   rate: z.number().min(0),
+  /** Machine quoted (its own tariff); null = any machine of the process. */
+  machineId: z.string().nullable().default(null),
 });
 export type QuoteLabor = z.infer<typeof quoteLaborSchema>;
 
@@ -498,8 +507,11 @@ export const quoteSchema = z.object({
   materials: z.array(quoteMaterialSchema).default([]),
   labor: z.array(quoteLaborSchema).default([]),
   difficulty: difficulty.default(1),
-  /** Utilidad sobre el costo (%). */
+  urgent: z.boolean().default(false),
+  /** Utilidad base sobre el costo (%). */
   marginPct: z.number().min(0).max(500),
+  /** Points added to the margin for difficulty and urgency (snapshot of the rules when quoted). */
+  extraMarginPct: z.number().min(0).max(1000).default(0),
   ivaPct: z.number().min(0).max(100),
   validDays: z.number().int().min(1).max(365),
   status: z.enum(QUOTE_STATUSES),
@@ -570,9 +582,18 @@ export const productionSettingsSchema = z.object({
       prensa: z.number().min(0).default(0),
       soldadura: z.number().min(0).default(0),
       banco: z.number().min(0).default(0),
+      pintura: z.number().min(0).default(0),
     })
-    .default({ torno: 0, fresadora: 0, cepillo: 0, cnc: 0, prensa: 0, soldadura: 0, banco: 0 }),
-  defaultMarginPct: z.number().min(0).max(500).default(0),
+    .default({ torno: 0, fresadora: 0, cepillo: 0, cnc: 0, prensa: 0, soldadura: 0, banco: 0, pintura: 0 }),
+  /** Utilidad base de S.M.I.: 35 %. */
+  defaultMarginPct: z.number().min(0).max(500).default(35),
+  /** Points added to the margin for "dificultad mayor" (2) and "muy alta" (3). */
+  difficultyMarginPct: z.number().min(0).max(500).default(15),
+  highDifficultyMarginPct: z.number().min(0).max(500).default(25),
+  /** Points added when the job is urgent (se baja la pieza montada en la máquina). */
+  urgencyMarginPct: z.number().min(0).max(1000).default(125),
+  /** Garantía sobre el trabajo entregado (días). Soldadura no tiene garantía. */
+  warrantyDays: z.number().int().min(0).max(3650).default(90),
   ivaPct: z.number().min(0).max(100).default(19),
   quoteValidDays: z.number().int().min(1).max(365).default(15),
   /** Days after delivery without claims before the service closes automatically. */
@@ -643,7 +664,12 @@ export type LegalInfo = z.infer<typeof legalInfoSchema>;
 export const settingsSchema = z.object({
   workshopName: z.string(),
   timezone: z.string(),
-  registrationOpen: z.boolean().default(true),
+  /** Self-registration from the home page (S.M.I.: closed; only the admins create accounts). */
+  registrationOpen: z.boolean().default(false),
+  /** Operarios may sign in (S.M.I.: no — they see their queue on the public board). */
+  staffLogin: z.boolean().default(false),
+  /** Secret of the read-only workshop board (/tablero/<token>); null until an admin creates it. */
+  boardToken: z.string().nullable().default(null),
   /** Optional shared code required to self-register (stored as a scrypt hash). */
   registrationCodeHash: z.string().nullable().default(null),
   maxPendingRegistrations: z.number().int().min(1).max(200).default(25),

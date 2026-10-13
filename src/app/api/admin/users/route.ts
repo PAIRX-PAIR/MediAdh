@@ -4,7 +4,7 @@ import { createAccountInput } from "@/lib/server/inputs";
 import { route } from "@/lib/server/route";
 import { createAccount } from "@/lib/server/services/team";
 
-export const POST = route({ access: "admin" }, async ({ req, principal }) => {
+export const POST = route({ access: "owner" }, async ({ req, principal }) => {
   const input = await readJson(req, createAccountInput);
   if (input.kind === "staff" && !input.startDate) throw badRequest("Indica la fecha de inicio del contrato.");
   const { user, notifications } = await createAccount(principal, {

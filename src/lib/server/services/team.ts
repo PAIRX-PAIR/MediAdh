@@ -1,4 +1,5 @@
 import "server-only";
+import { randomBytes } from "node:crypto";
 import { canAssignNewContract, contractStatus, isContractActive } from "@/lib/domain/contracts";
 import type { Collection, Contract, Database, Notification, Position, User } from "@/lib/domain/schema";
 import { isRealDate } from "@/lib/domain/time";
@@ -158,29 +159,46 @@ export async function rejectRegistration(principal: Principal, userId: string, r
   });
 }
 
+/** Readable, unique-enough username for an operario record ("ana.perez.4f2a"). */
+function operatorUsername(displayName: string): string {
+  const base =
+    displayName
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ".")
+      .replace(/^\.+|\.+$/g, "")
+      .slice(0, 22) || "operario";
+  return `${base}.${randomBytes(2).toString("hex")}`;
+}
+
 export async function createAccount(
   principal: Principal,
   input: {
     displayName: string;
     username: string;
     tempPassword: string;
+    adminScope?: "total" | "gestion";
     phone: string | null;
     kind: "admin" | "staff";
     positionId: string | null;
     replaceCurrent: boolean;
   } & ContractTerms,
 ) {
-  const username = normalizeUsername(input.username);
+  // Operarios don't sign in at S.M.I.: without credentials they get an unusable random password.
+  const noLogin = input.kind === "staff" && !input.tempPassword;
+  const username = input.username.trim() ? normalizeUsername(input.username) : noLogin ? operatorUsername(input.displayName) : "";
+  const tempPassword = noLogin ? randomBytes(32).toString("base64url") : input.tempPassword;
   if (!USERNAME_PATTERN.test(username)) {
     throw badRequest("Usuario inválido: 3 a 32 caracteres, letras minúsculas, números, punto, guion o guion bajo.");
   }
-  const problem = passwordProblems(input.tempPassword, { username });
+  const problem = noLogin ? null : passwordProblems(tempPassword, { username });
   if (problem) throw badRequest(problem, "weak_password");
   if (input.kind === "staff") {
     if (!input.positionId) throw badRequest("Elige el puesto para esta persona.");
     validateTerms(input);
   }
-  const passwordHash = await hashPassword(input.tempPassword);
+  const passwordHash = await hashPassword(tempPassword);
 
   return getDb().transact(["users", "positions", "notifications", "audit"], "Crea una cuenta", (docs) => {
     if (docs.users.items.some((u) => u.username === username)) throw conflict("Ese usuario ya existe.", "username_taken");
@@ -210,6 +228,7 @@ export async function createAccount(
       lastLoginAt: null,
       monthlySalary: null,
       transportAllowance: false,
+      adminScope: input.kind === "admin" ? (input.adminScope ?? "total") : "total",
     };
     docs.users.items.push(user);
     audit(docs.audit, actorOf(principal), "cuenta_creada", user.id, input.kind);

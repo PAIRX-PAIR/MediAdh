@@ -1,5 +1,6 @@
 import { dueInstant } from "./planning";
 import type { Order, OrderStatus, WorkItem } from "./schema";
+import { addDays, dateInZone } from "./time";
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -77,8 +78,10 @@ export function dueReminders(
     if (!order.reminders.overdue) out.push("overdue");
     return out;
   }
-  if (order.due.date === today && !order.reminders.dayOf) out.push("dayOf");
-  else if (now >= due - DAY && !order.reminders.before24h) out.push("before24h");
+  // On the delivery day only "HOY" applies; "mañana" would be wrong (and a duplicate) after it.
+  if (order.due.date === today) {
+    if (!order.reminders.dayOf) out.push("dayOf");
+  } else if (now >= due - DAY && !order.reminders.before24h) out.push("before24h");
   return out;
 }
 
@@ -115,4 +118,28 @@ export function orderMoney(order: Pick<Order, "price" | "finalPrice" | "supplies
     order.workItems.reduce((s, w) => s + (w.actualHours ?? (w.status === "completada" ? w.plannedHours : 0)) * rateOf(w.machineId), 0),
   );
   return { price, supplies, machineCost, grossMargin: price === null ? null : price - supplies - machineCost };
+}
+
+export interface WarrantyStatus {
+  /** Last day covered (AAAA-MM-DD), or null when nothing is covered or it was not delivered. */
+  until: string | null;
+  /** Every step is welding: no warranty at all. */
+  weldingOnly: boolean;
+  /** Some steps are welding (they stay out of the warranty). */
+  excludesWelding: boolean;
+}
+
+/**
+ * Garantía de S.M.I.: N días desde la entrega (90 por defecto); los trabajos de
+ * soldadura no tienen garantía aunque se hagan con el procedimiento adecuado.
+ */
+export function warrantyStatus(order: Pick<Order, "deliveredAt" | "workItems">, warrantyDays: number, timezone: string): WarrantyStatus {
+  const welding = order.workItems.filter((w) => w.process === "soldadura").length;
+  const weldingOnly = order.workItems.length > 0 && welding === order.workItems.length;
+  const delivered = order.deliveredAt ? dateInZone(new Date(order.deliveredAt), timezone) : null;
+  return {
+    until: delivered && !weldingOnly && warrantyDays > 0 ? addDays(delivered, warrantyDays) : null,
+    weldingOnly,
+    excludesWelding: welding > 0 && !weldingOnly,
+  };
 }

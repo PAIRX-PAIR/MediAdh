@@ -63,6 +63,7 @@ function WorkshopSection() {
   const [name, setName] = useState(s.workshopName);
   const [timezone, setTimezone] = useState(s.timezone);
   const [open, setOpen] = useState(s.registrationOpen);
+  const [staffLogin, setStaffLogin] = useState(s.staffLogin);
   const [code, setCode] = useState("");
   const [max, setMax] = useState<number | null>(s.maxPendingRegistrations);
   const { run, busy } = useAction();
@@ -76,6 +77,10 @@ function WorkshopSection() {
         <label className="flex items-start gap-3 rounded-xl border border-line bg-night/50 p-3 text-sm text-ink-soft sm:col-span-2">
           <input type="checkbox" checked={open} onChange={(e) => setOpen(e.target.checked)} className="mt-0.5 size-5 accent-[var(--color-glow)]" />
           Permitir que las personas pidan cuenta desde la página de inicio (quedan pendientes hasta que las apruebes).
+        </label>
+        <label className="flex items-start gap-3 rounded-xl border border-line bg-night/50 p-3 text-sm text-ink-soft sm:col-span-2">
+          <input type="checkbox" checked={staffLogin} onChange={(e) => setStaffLogin(e.target.checked)} className="mt-0.5 size-5 accent-[var(--color-glow)]" />
+          Los operarios pueden iniciar sesión (apagado: solo entran gerencia, administración, coordinación y asistencia; los operarios ven su cola en el tablero sin sesión).
         </label>
         <Field label="Código del taller (opcional)" hint={s.hasRegistrationCode ? "Hay un código activo. Escribe uno nuevo para cambiarlo, o deja vacío y guarda con «Quitar código»." : "Si lo defines, se pide al crear cuenta."}>
           {(id, d) => <Input id={id} aria-describedby={d} autoComplete="off" value={code} onChange={(e) => setCode(e.target.value)} />}
@@ -94,6 +99,7 @@ function WorkshopSection() {
                   workshopName: name,
                   timezone,
                   registrationOpen: open,
+                  staffLogin,
                   maxPendingRegistrations: max ?? 25,
                   ...(code.trim() ? { registrationCode: code.trim() } : {}),
                 }),
@@ -127,7 +133,8 @@ function ProductionSection() {
     >
       <div className="flex flex-col gap-5">
         <div>
-          <p className="mb-2 text-sm font-medium text-ink-soft">Tarifa por hora para cotizar (antes de IVA)</p>
+          <p className="mb-1 text-sm font-medium text-ink-soft">Tarifa por proceso (respaldo)</p>
+          <p className="mb-2 text-xs text-muted">Cada máquina tiene su propia tarifa (Cola → máquina). Esta se usa solo cuando la máquina no tiene tarifa o se cotiza «cualquier máquina».</p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {PROCESSES.map((p) => (
               <Field key={p} label={PROCESS_LABEL[p]}>
@@ -135,6 +142,20 @@ function ProductionSection() {
               </Field>
             ))}
           </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <Field label="Dificultad mayor" hint="Puntos que se suman a la utilidad.">
+            {(id, d) => <NumberInput id={id} ariaDescribedBy={d} max={500} value={form.difficultyMarginPct} onChange={(v) => set("difficultyMarginPct", v ?? 0)} suffix="pts" />}
+          </Field>
+          <Field label="Dificultad muy alta">
+            {(id) => <NumberInput id={id} max={500} value={form.highDifficultyMarginPct} onChange={(v) => set("highDifficultyMarginPct", v ?? 0)} suffix="pts" />}
+          </Field>
+          <Field label="Urgencia" hint="Se baja la pieza montada en la máquina.">
+            {(id, d) => <NumberInput id={id} ariaDescribedBy={d} max={1000} value={form.urgencyMarginPct} onChange={(v) => set("urgencyMarginPct", v ?? 0)} suffix="pts" />}
+          </Field>
+          <Field label="Garantía" hint="Desde la entrega. La soldadura no tiene garantía.">
+            {(id, d) => <NumberInput id={id} ariaDescribedBy={d} integer max={3650} value={form.warrantyDays} onChange={(v) => set("warrantyDays", v ?? 0)} suffix="días" />}
+          </Field>
         </div>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Field label="Utilidad por defecto">{(id) => <NumberInput id={id} max={500} value={form.defaultMarginPct} onChange={(v) => set("defaultMarginPct", v ?? 0)} suffix="%" />}</Field>

@@ -1,8 +1,8 @@
 import "server-only";
 import { diffFields } from "@/lib/domain/diff";
 import { QUOTE_STATUS_LABEL } from "@/lib/domain/labels";
-import { formatCop, quoteTotals } from "@/lib/domain/quote";
-import type { Difficulty, Notification, Order, Process, Quote } from "@/lib/domain/schema";
+import { extraMarginPct, formatCop, quoteTotals } from "@/lib/domain/quote";
+import type { Difficulty, Machine, Notification, Order, Process, ProductionSettings, Quote } from "@/lib/domain/schema";
 import { isRealDate } from "@/lib/domain/time";
 import type { Principal } from "../auth/principal";
 import { badRequest, conflict, notFound } from "../http";
@@ -17,8 +17,9 @@ export interface QuoteInput {
   description: string;
   quantity: number;
   materials: Array<{ id?: string; description: string; quantity: number; unitCost: number }>;
-  labor: Array<{ id?: string; process: Process; description: string; hours: number; rate: number | null }>;
+  labor: Array<{ id?: string; process: Process; machineId?: string | null; description: string; hours: number; rate: number | null }>;
   difficulty: Difficulty;
+  urgent: boolean;
   marginPct: number | null;
   ivaPct: number | null;
   validDays: number | null;
@@ -31,6 +32,7 @@ const QUOTE_LABELS = {
   description: "Descripción",
   quantity: "Cantidad",
   difficulty: "Dificultad",
+  urgent: "Urgente",
   marginPct: "Utilidad %",
   ivaPct: "IVA %",
   validDays: "Vigencia (días)",
@@ -38,7 +40,7 @@ const QUOTE_LABELS = {
   notes: "Notas",
 } as const;
 
-type QuoteDocs = "quotes" | "clients" | "settings" | "audit";
+type QuoteDocs = "quotes" | "clients" | "settings" | "machines" | "audit";
 
 function resolveClient(clients: Array<{ id: string; name: string }>, clientId: string | null, clientName: string | null) {
   if (clientId) {
@@ -51,7 +53,16 @@ function resolveClient(clients: Array<{ id: string; name: string }>, clientId: s
   return { clientId: null, clientName: name };
 }
 
-function lines(input: Pick<QuoteInput, "materials" | "labor">, previous: Quote | null, rates: Record<Process, number>) {
+/**
+ * Each machine has its own tariff (it depends on the machine and on its operator's
+ * salary); without a machine, or with a $0 tariff, the process rate of Ajustes applies.
+ */
+function rateFor(process: Process, machineId: string | null, machines: Machine[], rates: Record<Process, number>): number {
+  const machine = machineId ? machines.find((m) => m.id === machineId) : undefined;
+  return machine && machine.hourlyRate > 0 ? machine.hourlyRate : rates[process];
+}
+
+function lines(input: Pick<QuoteInput, "materials" | "labor">, previous: Quote | null, rates: Record<Process, number>, machines: Machine[]) {
   return {
     materials: input.materials.map((m) => ({
       id: m.id && previous?.materials.some((p) => p.id === m.id) ? m.id : newId(),
@@ -59,14 +70,20 @@ function lines(input: Pick<QuoteInput, "materials" | "labor">, previous: Quote |
       quantity: m.quantity,
       unitCost: m.unitCost,
     })),
-    labor: input.labor.map((l) => ({
-      id: l.id && previous?.labor.some((p) => p.id === l.id) ? l.id : newId(),
-      process: l.process,
-      description: l.description,
-      hours: l.hours,
-      // Rates are copied into the quote: later tariff changes never alter a sent price.
-      rate: l.rate ?? rates[l.process],
-    })),
+    labor: input.labor.map((l) => {
+      const machine = l.machineId ? machines.find((m) => m.id === l.machineId) : undefined;
+      if (l.machineId && !machine) throw badRequest("Una de las máquinas cotizadas ya no existe.");
+      const process = machine?.process ?? l.process;
+      return {
+        id: l.id && previous?.labor.some((p) => p.id === l.id) ? l.id : newId(),
+        process,
+        machineId: machine?.id ?? null,
+        description: l.description,
+        hours: l.hours,
+        // Rates are copied into the quote: later tariff changes never alter a sent price.
+        rate: l.rate ?? rateFor(process, machine?.id ?? null, machines, rates),
+      };
+    }),
   };
 }
 
@@ -83,8 +100,10 @@ function pseudoLoad(machineId: string, process: Process, hours: number): Order {
   } as unknown as Order;
 }
 
+const extraFor = (q: Pick<Quote, "difficulty" | "urgent">, production: ProductionSettings) => extraMarginPct(q.difficulty, q.urgent, production);
+
 export async function createQuote(principal: Principal, input: QuoteInput) {
-  return getDb().transact<QuoteDocs, Quote>(["quotes", "clients", "settings", "audit"], "Crea una cotización", (docs) => {
+  return getDb().transact<QuoteDocs, Quote>(["quotes", "clients", "settings", "machines", "audit"], "Crea una cotización", (docs) => {
     const production = docs.settings.production;
     const client = resolveClient(docs.clients.items, input.clientId, input.clientName);
     const now = nowIso();
@@ -95,9 +114,11 @@ export async function createQuote(principal: Principal, input: QuoteInput) {
       title: input.title,
       description: input.description,
       quantity: input.quantity,
-      ...lines(input, null, production.processRates),
+      ...lines(input, null, production.processRates, docs.machines.items),
       difficulty: input.difficulty,
+      urgent: input.urgent,
       marginPct: input.marginPct ?? production.defaultMarginPct,
+      extraMarginPct: extraFor({ difficulty: input.difficulty, urgent: input.urgent }, production),
       ivaPct: input.ivaPct ?? production.ivaPct,
       validDays: input.validDays ?? production.quoteValidDays,
       status: "borrador",
@@ -119,7 +140,7 @@ export async function createQuote(principal: Principal, input: QuoteInput) {
 }
 
 export async function updateQuote(principal: Principal, id: string, patch: Partial<QuoteInput>) {
-  return getDb().transact<QuoteDocs, Quote>(["quotes", "clients", "settings", "audit"], "Actualiza una cotización", (docs) => {
+  return getDb().transact<QuoteDocs, Quote>(["quotes", "clients", "settings", "machines", "audit"], "Actualiza una cotización", (docs) => {
     const quote = docs.quotes.items.find((q) => q.id === id);
     if (!quote) throw notFound("Cotización no encontrada.");
     if (quote.status === "aprobada" || quote.status === "rechazada") {
@@ -131,9 +152,11 @@ export async function updateQuote(principal: Principal, id: string, patch: Parti
     if (patch.clientId !== undefined || patch.clientName !== undefined) {
       Object.assign(quote, resolveClient(docs.clients.items, patch.clientId ?? null, patch.clientName ?? quote.clientName));
     }
-    for (const key of ["title", "description", "quantity", "difficulty", "notes"] as const) {
+    for (const key of ["title", "description", "quantity", "difficulty", "urgent", "notes"] as const) {
       if (patch[key] !== undefined) (quote as Record<string, unknown>)[key] = patch[key];
     }
+    // Difficulty or urgency changed: re-apply the current rules of Ajustes.
+    if (patch.difficulty !== undefined || patch.urgent !== undefined) quote.extraMarginPct = extraFor(quote, docs.settings.production);
     if (patch.marginPct !== undefined && patch.marginPct !== null) quote.marginPct = patch.marginPct;
     if (patch.ivaPct !== undefined && patch.ivaPct !== null) quote.ivaPct = patch.ivaPct;
     if (patch.validDays !== undefined && patch.validDays !== null) quote.validDays = patch.validDays;
@@ -142,6 +165,7 @@ export async function updateQuote(principal: Principal, id: string, patch: Parti
         { materials: patch.materials ?? quote.materials, labor: patch.labor ?? quote.labor },
         quote,
         docs.settings.production.processRates,
+        docs.machines.items,
       );
       quote.materials = next.materials;
       quote.labor = next.labor;
@@ -209,6 +233,7 @@ export async function approveQuote(principal: Principal, id: string, input: Appr
           title: quote.title,
           description: quote.description,
           difficulty: quote.difficulty,
+          urgent: quote.urgent,
           quantity: quote.quantity,
           condition: input.condition,
           receivedAt: null,
@@ -216,7 +241,7 @@ export async function approveQuote(principal: Principal, id: string, input: Appr
           workItems: quote.labor
             .filter((l) => l.hours > 0)
             .map((l) => {
-              const chosen = input.machines[l.id];
+              const chosen = input.machines[l.id] ?? l.machineId ?? undefined;
               const machineId = chosen !== undefined ? chosen : (leastLoadedMachine(docs.machines.items, assigned, l.process)?.id ?? null);
               if (machineId) assigned.push(pseudoLoad(machineId, l.process, l.hours));
               return { process: l.process, machineId, description: l.description, plannedHours: l.hours };

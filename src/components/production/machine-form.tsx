@@ -34,10 +34,13 @@ export function MachineFormModal({ machine, onClose }: { machine: Machine | null
   const { confirm, dialog } = useConfirm();
   const set = <K extends keyof MachineInput>(k: K, v: MachineInput[K]) => setForm((f) => ({ ...f, [k]: v }));
 
+  // Coordinación y asistencia only assign the operator; the rest is configuration.
+  const owner = data.me.scope === "total";
   const save = async () => {
     const { state: _state, ...rest } = form;
     void _state;
-    const ok = await run("save", () => (machine ? api.machines.update(machine.id, rest) : api.machines.create(form)), machine ? "Máquina actualizada" : "Máquina agregada");
+    const patch = owner ? rest : { positionId: form.positionId };
+    const ok = await run("save", () => (machine ? api.machines.update(machine.id, patch) : api.machines.create(form)), machine ? "Máquina actualizada" : "Máquina agregada");
     if (ok) onClose();
   };
   const changeState = async (state: Machine["state"], extra: { activeSince?: string; stopReason?: string | null } = {}) => {
@@ -56,7 +59,7 @@ export function MachineFormModal({ machine, onClose }: { machine: Machine | null
       description={machine ? `${PROCESS_LABEL[machine.process]} · ${MACHINE_STATE_LABEL[machine.state]}` : "Una máquina nueva empieza a sumar capacidad desde la fecha en que la actives."}
       footer={
         <>
-          {machine && (
+          {machine && owner && (
             <Button
               variant="ghost"
               icon={<Trash2 className="size-4" />}
@@ -165,18 +168,20 @@ export function MachineFormModal({ machine, onClose }: { machine: Machine | null
           <Field label="Tope de horas por día (opcional)" hint="Vacío = trabaja todo el horario del taller (Ajustes → Horario).">
             {(id, d) => <NumberInput id={id} ariaDescribedBy={d} min={0} max={24} value={form.hoursPerDay} onChange={(v) => set("hoursPerDay", v)} placeholder="Horario del taller" suffix="h" />}
           </Field>
-          <Field label="Tarifa por hora (costo)" hint="Para calcular el costo real de cada trabajo.">
+          <Field label="Tarifa por hora" hint="Se usa al cotizar en esta máquina. Incluye el costo de la máquina y el sueldo de su operario (sueldo ÷ 210 h).">
             {(id, d) => <MoneyInput id={id} ariaDescribedBy={d} value={form.hourlyRate} onChange={(v) => set("hourlyRate", v ?? 0)} allowEmpty={false} />}
           </Field>
-          <Field label="Puesto que la opera" hint="Los pasos en esta máquina se asignan a ese puesto.">
+          <Field label="Operario responsable" hint="Un operario puede tener 2 o 3 máquinas. Su cola aparece en el tablero del taller.">
             {(id, d) => (
               <Select id={id} aria-describedby={d} value={form.positionId ?? ""} onChange={(e) => set("positionId", e.target.value || null)}>
-                <option value="">Sin puesto fijo</option>
-                {data.positions.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.title}
-                  </option>
-                ))}
+                <option value="">Sin operario asignado</option>
+                {data.positions
+                  .filter((p) => !p.grantsAdmin)
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.holder ? `${p.holder.name} · ${p.title}` : `${p.title} (vacante)`}
+                    </option>
+                  ))}
               </Select>
             )}
           </Field>

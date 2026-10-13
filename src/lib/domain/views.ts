@@ -25,6 +25,8 @@ export interface MeView {
   displayName: string;
   kind: "admin" | "staff";
   isAdmin: boolean;
+  /** total = gerencia/administración; gestion = coordinación/asistencia; null = operario. */
+  scope: "total" | "gestion" | null;
   phone: string | null;
   mustChangePassword: boolean;
   needsConsent: boolean;
@@ -83,6 +85,7 @@ export interface SettingsView {
   workshopName: string;
   timezone: string;
   registrationOpen: boolean;
+  staffLogin: boolean;
   hasRegistrationCode: boolean;
   maxPendingRegistrations: number;
   legal: LegalInfo;
@@ -115,7 +118,7 @@ export interface PublicInfo {
   requiresAccessCode: boolean;
   positions: Array<{ id: string; title: string; area: string }>;
   legal: LegalInfo;
-  demo: { username: string; password: string; worker: { username: string; password: string } } | null;
+  demo: { username: string; password: string; worker: { username: string; password: string }; board: string } | null;
   needsSetup: boolean;
 }
 

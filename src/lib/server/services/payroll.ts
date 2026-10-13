@@ -5,7 +5,7 @@ import { diffFields } from "@/lib/domain/diff";
 import { liquidate, overlapsAnother, quincenaByKey, quincenaOf, shiftQuincena, type PayrollPerson, type Quincena } from "@/lib/domain/payroll";
 import type { Attendance, Database, User } from "@/lib/domain/schema";
 import { isRealDate, timeInZone } from "@/lib/domain/time";
-import type { Principal } from "../auth/principal";
+import { isOwner, type Principal } from "../auth/principal";
 import { badRequest, notFound } from "../http";
 import { getDb } from "../store";
 import { actorOf, audit, newId, nowIso, track } from "./common";
@@ -119,8 +119,11 @@ export async function payrollReport(principal: Principal, key: string | null) {
   const entries = docs.attendance.items
     .filter((e) => e.date >= quincena.from && e.date <= quincena.to)
     .sort((a, b) => (a.date === b.date ? a.start.localeCompare(b.start) : a.date.localeCompare(b.date)));
-  const people = payrollPeople(docs, entries, principal.today);
+  const owner = isOwner(principal);
+  // Coordinación y asistencia keep the hours log; salaries and money stay with gerencia/administración.
+  const people = payrollPeople(docs, entries, principal.today).map((p) => (owner ? p : { ...p, monthlySalary: null, transportAllowance: false }));
   return {
+    moneyHidden: !owner,
     quincena,
     previous: shiftQuincena(quincena, -1).key,
     next: shiftQuincena(quincena, 1).key,

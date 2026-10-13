@@ -19,8 +19,8 @@ export const DEMO_CREDENTIALS = {
 
 const PEOPLE: Record<string, string> = {
   "coordinador-produccion": "Laura Gómez (ficticio)",
+  "asistente-administrativa": "Sara Mejía (ficticio)",
   "tornero-1": "Carlos Pérez (ficticio)",
-  "tornero-3": "Andrés Ruiz (ficticio)",
   "programador-cnc": "Diana Torres (ficticio)",
   fresadora: "Jorge Díaz (ficticio)",
   soldador: "Miguel Rojas (ficticio)",
@@ -35,6 +35,8 @@ export async function seedDemo(raw: RawStore) {
   const iso = now.toISOString();
   const settings = defaultSettings(iso);
   settings.workshopName = "Procesos productivos S.M.I. · Demo";
+  // Demo board link (public on purpose, like the demo credentials).
+  settings.boardToken = "demo";
   const today = todayIn(settings.timezone, now);
   const [adminHash, workerHash] = await Promise.all([
     hashPassword(DEMO_CREDENTIALS.password),
@@ -63,6 +65,7 @@ export async function seedDemo(raw: RawStore) {
     lastLoginAt: null,
     monthlySalary: null,
     transportAllowance: false,
+    adminScope: "total",
     ...over,
   });
 
@@ -91,13 +94,8 @@ export async function seedDemo(raw: RawStore) {
       const username = position.id === "tornero-1" ? DEMO_CREDENTIALS.worker.username : `${position.id.replace(/-/g, ".")}.demo`;
       const user = baseUser({ username, displayName: name });
       users.push(user);
-      const end = position.id === "tornero-3" ? 3 : position.id === "soldador" ? 120 : null;
+      const end = position.id === "programador-cnc" ? 3 : position.id === "soldador" ? 120 : null;
       contractFor(position, user, -60, end);
-    }
-    if (position.id === "tornero-2") {
-      const former = baseUser({ username: "tornero2.anterior", displayName: "Pedro León (ficticio)" });
-      users.push(former);
-      contractFor(position, former, -90, -1); // expired yesterday -> vacant
     }
   }
   users.push(
@@ -106,7 +104,7 @@ export async function seedDemo(raw: RawStore) {
       displayName: "Sofía Herrera (ficticio)",
       status: "pending",
       approvedAt: null,
-      requestedPositionId: "tornero-2",
+      requestedPositionId: "tornero-1",
       registrationNote: "Entro a reemplazar a Pedro en el turno de la mañana.",
     }),
   );
@@ -154,8 +152,8 @@ export async function seedDemo(raw: RawStore) {
       priority: "normal",
       checklist: [step("Verificar plano rev. C", true), step("Desbaste"), step("Roscado"), step("Control dimensional")],
     }),
-    task("tornero-2", "Rectificar asientos de válvula", { status: "bloqueada", blockedReason: "Falta inserto CCMT 09" }),
-    task("tornero-3", "Fabricar pasadores templados", { quantity: 50, quantityDone: 32, status: "en_proceso", startedAt: iso }),
+    task("tornero-1", "Rectificar asientos de válvula", { status: "bloqueada", blockedReason: "Falta inserto CCMT 09" }),
+    task("fresadora", "Fabricar pasadores templados", { quantity: 50, quantityDone: 32, status: "en_proceso", startedAt: iso }),
     task("programador-cnc", "Programa CAM para carcasa de reductor", {
       priority: "alta",
       checklist: [step("Modelo 3D recibido", true), step("Estrategia de desbaste"), step("Simulación"), step("Post-procesado")],

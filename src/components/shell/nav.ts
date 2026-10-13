@@ -29,6 +29,8 @@ export interface NavItem {
   primary?: boolean;
   /** Sidebar section. */
   group?: "Producción" | "Equipo" | "Sistema" | "Mi trabajo";
+  /** Only gerencia y administración (scope total). */
+  owner?: boolean;
   badge?: (data: SyncPayload) => number;
 }
 
@@ -55,7 +57,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: "/admin/indicadores", label: "Indicadores", icon: BarChart3, group: "Producción" },
   { href: "/admin/historico", label: "Histórico", icon: Archive, group: "Producción" },
   { href: "/admin/tareas", label: "Tareas", icon: Wrench, group: "Equipo", badge: (d) => d.tasks.filter((t) => t.status === "bloqueada").length },
-  { href: "/admin/equipo", label: "Equipo", icon: Users, primary: true, group: "Equipo", badge: (d) => d.users?.filter((u) => u.status === "pending").length ?? 0 },
+  { href: "/admin/equipo", label: "Equipo", icon: Users, primary: true, owner: true, group: "Equipo", badge: (d) => d.users?.filter((u) => u.status === "pending").length ?? 0 },
   {
     href: "/admin/solicitudes",
     label: "Pedidos",
@@ -67,8 +69,8 @@ export const ADMIN_NAV: NavItem[] = [
   { href: "/admin/cierres", label: "Cierres", icon: FileClock, group: "Equipo" },
   { href: "/admin/nomina", label: "Nómina", icon: Wallet, group: "Equipo" },
   { href: "/admin/avisos", label: "Avisos", icon: Megaphone, group: "Equipo" },
-  { href: "/admin/ajustes", label: "Ajustes", icon: Settings, group: "Sistema" },
-  { href: "/admin/auditoria", label: "Auditoría", icon: ShieldCheck, group: "Sistema" },
+  { href: "/admin/ajustes", label: "Ajustes", icon: Settings, owner: true, group: "Sistema" },
+  { href: "/admin/auditoria", label: "Auditoría", icon: ShieldCheck, owner: true, group: "Sistema" },
   { href: "/perfil", label: "Perfil", icon: UserRound, group: "Sistema" },
 ];
 

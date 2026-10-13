@@ -102,6 +102,8 @@ export interface Job {
   hours: number;
   due: number | null;
   difficulty: number;
+  /** Urgent jobs bump the piece mounted on the machine: they go first. */
+  urgent: boolean;
   receivedAt: number;
 }
 
@@ -121,6 +123,7 @@ export function jobsFromOrders(orders: Order[], timezone: string): Job[] {
         hours,
         due: scheduleTarget(o, timezone),
         difficulty: o.difficulty,
+        urgent: o.urgent ?? false,
         receivedAt: Date.parse(o.intake.receivedAt),
       });
     }
@@ -130,6 +133,7 @@ export function jobsFromOrders(orders: Order[], timezone: string): Job[] {
 
 /** Earliest due date first; no date goes last; then harder jobs, then the oldest. */
 export function byDispatchRule(a: Job, b: Job): number {
+  if (a.urgent !== b.urgent) return a.urgent ? -1 : 1;
   const da = a.due ?? Number.POSITIVE_INFINITY;
   const db = b.due ?? Number.POSITIVE_INFINITY;
   if (da !== db) return da - db;
@@ -463,8 +467,9 @@ export function prioritize(input: PriorityInput, ctx: PlanContext, schedule?: Sc
     if (due !== null && due > ctx.now && end && dueDate && end > dueDate) {
       reasons.push({ label: `Con la cola actual terminaría el ${end}, después de la entrega`, points: 15 });
     }
-    if (o.difficulty === 3) reasons.push({ label: "Marcada como urgente (dificultad 3)", points: 15 });
-    else if (o.difficulty === 2) reasons.push({ label: "Trabajo complicado (dificultad 2)", points: 7 });
+    if (o.urgent) reasons.push({ label: "Urgente: se baja la pieza montada en la máquina", points: 40 });
+    if (o.difficulty === 3) reasons.push({ label: "Dificultad muy alta", points: 10 });
+    else if (o.difficulty === 2) reasons.push({ label: "Dificultad mayor", points: 7 });
 
     const tier = input.clientTier(o.clientId);
     if (tier === 3) reasons.push({ label: "Cliente estratégico", points: 10 });
@@ -524,6 +529,8 @@ export interface CommitRequest {
   dueDate: string;
   dueTime?: string;
   difficulty?: number;
+  /** Urgent work goes ahead of the queue (the answer then only depends on capacity). */
+  urgent?: boolean;
 }
 
 export interface CommitMove {
@@ -556,11 +563,11 @@ export function canCommit(orders: Order[], request: CommitRequest, ctx: PlanCont
   const newJobs: Job[] = [];
   const now = ctx.now;
   for (const [process, hours] of Object.entries(request.hoursByProcess ?? {}) as Array<[Process, number]>) {
-    if (hours > 0) newJobs.push({ orderId: NEW_ID, folio: "NUEVO", workItemId: `p-${process}`, process, machineId: null, hours, due, difficulty: request.difficulty ?? 1, receivedAt: now });
+    if (hours > 0) newJobs.push({ orderId: NEW_ID, folio: "NUEVO", workItemId: `p-${process}`, process, machineId: null, hours, due, difficulty: request.difficulty ?? 1, urgent: request.urgent ?? false, receivedAt: now });
   }
   for (const [machineId, hours] of Object.entries(request.hoursByMachine ?? {})) {
     const m = ctx.machines.find((x) => x.id === machineId);
-    if (m && hours > 0) newJobs.push({ orderId: NEW_ID, folio: "NUEVO", workItemId: `m-${machineId}`, process: m.process, machineId, hours, due, difficulty: request.difficulty ?? 1, receivedAt: now });
+    if (m && hours > 0) newJobs.push({ orderId: NEW_ID, folio: "NUEVO", workItemId: `m-${machineId}`, process: m.process, machineId, hours, due, difficulty: request.difficulty ?? 1, urgent: request.urgent ?? false, receivedAt: now });
   }
   if (newJobs.length === 0) {
     return { verdict: "si", finishQueued: ctx.today, finishPrioritized: ctx.today, feasibleDate: ctx.today, moved: [], perMachine: [], explanation: "No se indicaron horas de trabajo." };

@@ -13,12 +13,22 @@ import { useAction } from "@/lib/client/use-action";
 import { useProduction } from "@/lib/client/use-production";
 import { PROCESS_LABEL, QUOTE_STATUS_LABEL, formatDate } from "@/lib/domain/labels";
 import { canCommit } from "@/lib/domain/planning";
-import { formatCop, quoteDisplayStatus, quoteTotals, quoteValidUntil, quoteWarnings } from "@/lib/domain/quote";
-import { PROCESSES, type Difficulty, type Process, type Quote } from "@/lib/domain/schema";
+import { extraMarginPct, formatCop, quoteDisplayStatus, quoteTotals, quoteValidUntil, quoteWarnings } from "@/lib/domain/quote";
+import { PROCESSES, type Difficulty, type Machine, type Process, type ProductionSettings, type Quote } from "@/lib/domain/schema";
 import { addDays } from "@/lib/domain/time";
 import type { QuoteView } from "@/lib/domain/views";
 import { ClientPicker } from "./client-form";
 import { CommitVerdict } from "./commit-verdict";
+
+/** Picker value "m:<id>" (a machine and its own tariff) or "p:<process>" (any machine, process rate). */
+function laborTarget(value: string, machines: Machine[], rates: ProductionSettings["processRates"] | undefined) {
+  if (value.startsWith("m:")) {
+    const m = machines.find((x) => x.id === value.slice(2));
+    if (m) return { process: m.process, machineId: m.id, rate: m.hourlyRate > 0 ? m.hourlyRate : (rates?.[m.process] ?? 0) };
+  }
+  const process = value.slice(2) as Process;
+  return { process, machineId: null, rate: rates?.[process] ?? 0 };
+}
 
 const STATUS_TONE = { borrador: "neutral", enviada: "glow", aprobada: "done", rechazada: "blocked", vencida: "pending" } as const;
 
@@ -41,6 +51,7 @@ function toInput(q: QuoteView): QuoteInput {
     materials: q.materials.map((m) => ({ ...m })),
     labor: q.labor.map((l) => ({ ...l })),
     difficulty: q.difficulty,
+    urgent: q.urgent,
     marginPct: q.marginPct,
     ivaPct: q.ivaPct,
     validDays: q.validDays,
@@ -63,8 +74,9 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
           description: "",
           quantity: 1,
           materials: [],
-          labor: [{ process: "torno", description: "", hours: 1, rate: rates?.torno ?? 0 }],
+          labor: [{ process: "torno", machineId: null, description: "", hours: 1, rate: rates?.torno ?? 0 }],
           difficulty: 1,
+          urgent: false,
           marginPct: prod.settings?.defaultMarginPct ?? 0,
           ivaPct: prod.settings?.ivaPct ?? 19,
           validDays: prod.settings?.quoteValidDays ?? 15,
@@ -90,11 +102,19 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
   }, [quote, quote?.updatedAt]);
 
   const locked = quote?.status === "aprobada" || quote?.status === "rechazada";
+  // The stored extra margin is a snapshot; a changed difficulty/urgency uses today's rules.
+  const extra =
+    quote && quote.difficulty === form.difficulty && quote.urgent === form.urgent
+      ? quote.extraMarginPct
+      : prod.settings
+        ? extraMarginPct(form.difficulty, form.urgent, prod.settings)
+        : 0;
   const calc = {
     materials: form.materials,
     labor: form.labor.map((l) => ({ ...l, id: l.id ?? "", rate: l.rate ?? 0 })),
     difficulty: form.difficulty,
     marginPct: form.marginPct ?? 0,
+    extraMarginPct: extra,
     ivaPct: form.ivaPct ?? 19,
     quantity: form.quantity,
   };
@@ -103,7 +123,7 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
 
   const [commitDate, setCommitDate] = useState(addDays(data.today, 7));
   const commit =
-    totals.totalHours > 0 ? canCommit(prod.asOrders, { hoursByProcess: totals.hoursByProcess, dueDate: commitDate, difficulty: form.difficulty }, prod.ctx) : null;
+    totals.totalHours > 0 ? canCommit(prod.asOrders, { hoursByProcess: totals.hoursByProcess, dueDate: commitDate, difficulty: form.difficulty, urgent: form.urgent }, prod.ctx) : null;
 
   const save = async () => {
     const payload = { ...form, clientName: form.clientId ? null : (form.clientName ?? "").trim() };
@@ -136,7 +156,7 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
             {quote.issuedAt && <span>Vigente hasta {formatDate(quoteValidUntil(quote), { day: "numeric", month: "long" })}</span>}
           </span>
         ) : (
-          "Materiales + horas de máquina × tarifa, recargo por dificultad, utilidad e IVA."
+          "Materiales + horas × tarifa de cada máquina, utilidad (con dificultad y urgencia) e IVA."
         )
       }
     >
@@ -186,17 +206,25 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
               {form.labor.map((l, i) => (
                 <div key={l.id ?? `l-${i}`} className="grid grid-cols-2 gap-2 rounded-xl border border-line bg-night/50 p-3 sm:grid-cols-[10rem_1fr_6.5rem_9rem_auto]">
                   <Select
-                    aria-label="Proceso"
-                    value={l.process}
+                    aria-label="Máquina"
+                    value={l.machineId ? `m:${l.machineId}` : `p:${l.process}`}
                     onChange={(e) => {
-                      const process = e.target.value as Process;
-                      set("labor", form.labor.map((x, j) => (j === i ? { ...x, process, rate: rates?.[process] ?? x.rate } : x)));
+                      const next = laborTarget(e.target.value, prod.machines, rates);
+                      set("labor", form.labor.map((x, j) => (j === i ? { ...x, ...next } : x)));
                     }}
                   >
                     {PROCESSES.map((p) => (
-                      <option key={p} value={p}>
-                        {PROCESS_LABEL[p]}
-                      </option>
+                      <optgroup key={p} label={PROCESS_LABEL[p]}>
+                        <option value={`p:${p}`}>{PROCESS_LABEL[p]} (cualquier máquina)</option>
+                        {prod.machines
+                          .filter((m) => m.process === p)
+                          .map((m) => (
+                            <option key={m.id} value={`m:${m.id}`}>
+                              {m.name}
+                              {m.state === "inactiva" ? " · próximamente" : ""}
+                            </option>
+                          ))}
+                      </optgroup>
                     ))}
                   </Select>
                   <Input aria-label="Detalle" placeholder="Detalle (opcional)" value={l.description} onChange={(e) => set("labor", form.labor.map((x, j) => (j === i ? { ...x, description: e.target.value } : x)))} />
@@ -212,7 +240,7 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
                 size="sm"
                 className="self-start"
                 icon={<Plus className="size-4" />}
-                onClick={() => set("labor", [...form.labor, { process: "torno", description: "", hours: 1, rate: rates?.torno ?? 0 }])}
+                onClick={() => set("labor", [...form.labor, { process: "torno", machineId: null, description: "", hours: 1, rate: rates?.torno ?? 0 }])}
               >
                 Agregar horas
               </Button>
@@ -220,7 +248,7 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
           </section>
 
           <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="Utilidad sobre costo">{(id) => <NumberInput id={id} value={form.marginPct} onChange={(v) => set("marginPct", v ?? 0)} suffix="%" max={500} />}</Field>
+            <Field label="Utilidad base sobre costo">{(id) => <NumberInput id={id} value={form.marginPct} onChange={(v) => set("marginPct", v ?? 0)} suffix="%" max={500} />}</Field>
             <Field label="IVA">{(id) => <NumberInput id={id} value={form.ivaPct} onChange={(v) => set("ivaPct", v ?? 0)} suffix="%" max={100} />}</Field>
             <Field label="Vigencia">{(id) => <NumberInput id={id} integer min={1} max={365} value={form.validDays} onChange={(v) => set("validDays", v ?? 15)} suffix="días" />}</Field>
           </div>
@@ -252,20 +280,26 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
               onChange={(v) => !locked && set("difficulty", Number(v) as Difficulty)}
               options={[
                 { value: "1", label: "Normal" },
-                { value: "2", label: "+15 %" },
-                { value: "3", label: "+25 %" },
+                { value: "2", label: `Mayor +${prod.settings?.difficultyMarginPct ?? 15}` },
+                { value: "3", label: `Muy alta +${prod.settings?.highDifficultyMarginPct ?? 25}` },
               ]}
               className="[&>button]:flex-1 [&>button]:justify-center"
             />
-            <p className="mt-2 text-xs text-muted">Normal · Complicado (+15 %) · Urgente (+25 %), sobre el costo directo.</p>
+            <label className="mt-3 flex items-start gap-3 rounded-lg border border-line p-2.5 text-sm text-ink-soft">
+              <input type="checkbox" disabled={locked} checked={form.urgent} onChange={(e) => set("urgent", e.target.checked)} className="mt-0.5 size-5 accent-[var(--color-glow)]" />
+              <span>
+                <strong className="text-ink">Urgente</strong>: hay que bajar la pieza que está montada en la máquina (+{prod.settings?.urgencyMarginPct ?? 125} puntos de utilidad; va primero en la cola).
+              </span>
+            </label>
+            <p className="mt-2 text-xs text-muted">Los puntos se suman a la utilidad base ({prod.settings?.defaultMarginPct ?? 35} %). Se ajustan en Ajustes → Producción.</p>
           </div>
 
           <dl className="tabular flex flex-col gap-1.5 rounded-xl border border-glow/30 bg-navy-900/60 p-4 text-sm">
             <Row label="Materiales" value={formatCop(totals.materials)} />
             <Row label={`Horas máquina (${totals.totalHours} h)`} value={formatCop(totals.labor)} />
             <Row label="Costo directo" value={formatCop(totals.cost)} strong />
-            {totals.surcharge > 0 && <Row label={`Recargo dificultad ${Math.round(totals.surchargePct * 100)} %`} value={formatCop(totals.surcharge)} />}
-            <Row label={`Utilidad ${form.marginPct ?? 0} %`} value={formatCop(totals.margin)} />
+            <Row label={`Utilidad ${form.marginPct ?? 0} %`} value={formatCop(totals.baseMargin)} />
+            {totals.extraMargin > 0 && <Row label={`Dificultad / urgencia +${extra} pts`} value={formatCop(totals.extraMargin)} />}
             <Row label="Subtotal (antes de IVA)" value={formatCop(totals.subtotal)} strong />
             <Row label={`IVA ${form.ivaPct ?? 0} %`} value={formatCop(totals.iva)} />
             <div className="mt-1 flex items-baseline justify-between border-t border-line pt-2">

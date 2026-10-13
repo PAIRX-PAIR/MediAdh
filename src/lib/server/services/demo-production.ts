@@ -43,11 +43,11 @@ export function demoProduction(ctx: DemoContext) {
   const at = (date: string, time = "09:00") => zonedInstant(date, time, tz).toISOString();
 
   // Example tariffs, only for the demo (the real app starts at $0 until the admin sets them).
-  settings.production.processRates = { torno: 55_000, fresadora: 65_000, cepillo: 50_000, cnc: 110_000, prensa: 45_000, soldadura: 60_000, banco: 40_000 };
-  settings.production.defaultMarginPct = 30;
+  settings.production.processRates = { torno: 55_000, fresadora: 65_000, cepillo: 50_000, cnc: 110_000, prensa: 45_000, soldadura: 60_000, banco: 40_000, pintura: 38_000 };
+  settings.production.defaultMarginPct = 35;
 
   const machines: Collection<Machine> = defaultMachines(iso);
-  const rates: Record<string, number> = { cnc: 95_000, torno: 48_000, fresadora: 55_000, cepillo: 42_000, prensa: 38_000, soldadura: 50_000, banco: 32_000 };
+  const rates: Record<string, number> = { cnc: 95_000, torno: 48_000, fresadora: 55_000, cepillo: 42_000, prensa: 38_000, soldadura: 50_000, banco: 32_000, pintura: 30_000 };
   for (const m of machines.items) {
     m.hourlyRate = rates[m.process] ?? 0;
     if (m.state === "activa") m.activeSince = addDays(today, -400);
@@ -125,6 +125,7 @@ export function demoProduction(ctx: DemoContext) {
       description: "",
       status: "recibida",
       difficulty: 1,
+      urgent: false,
       intake: { receivedAt: created, quantity: 1, condition: "" },
       intakePhotoIds: [],
       drawingIds: [],
@@ -231,7 +232,8 @@ export function demoProduction(ctx: DemoContext) {
       clientId: client(1).id,
       title: "Piñón cónico Z18 (reparación urgente)",
       description: "La cosechadora está parada. Copiar del piñón dañado.",
-      difficulty: 3,
+      difficulty: 2,
+      urgent: true,
       status: "recibida",
       createdAt: at(today, "07:10"),
       intake: { receivedAt: at(today, "07:10"), quantity: 1, condition: "Piñón con dos dientes partidos (ficticio)" },
@@ -374,7 +376,9 @@ export function demoProduction(ctx: DemoContext) {
       materials: [],
       labor: [],
       difficulty: 1,
-      marginPct: 30,
+      urgent: false,
+      marginPct: 35,
+      extraMarginPct: 0,
       ivaPct: 19,
       validDays: 15,
       status: "borrador",
@@ -390,7 +394,7 @@ export function demoProduction(ctx: DemoContext) {
       ...over,
     };
   };
-  const labor = (process: Process, hours: number) => ({ id: randomUUID(), process, description: "", hours, rate: settings.production.processRates[process] });
+  const labor = (process: Process, hours: number) => ({ id: randomUUID(), process, machineId: null, description: "", hours, rate: settings.production.processRates[process] });
   quotes.items.push(
     quote({
       clientId: client(0).id,
@@ -398,6 +402,7 @@ export function demoProduction(ctx: DemoContext) {
       title: "Corona dentada Z64 módulo 8",
       quantity: 1,
       difficulty: 2,
+      extraMarginPct: 15,
       materials: [{ id: randomUUID(), description: "Disco acero 4140 Ø540×90", quantity: 1, unitCost: 1_350_000 }],
       labor: [labor("torno", 6), labor("cnc", 14), labor("banco", 2)],
       status: "enviada",

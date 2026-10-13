@@ -3,15 +3,18 @@ import { DEFAULT_TIMEZONE } from "./time";
 
 export const LEGAL_POLICY_VERSION = "2026-10-12";
 
-/** Initial workshop positions. Admins rename, add or remove them from the app. */
+/**
+ * Puestos de S.M.I. Each operator position may run several machines (machine →
+ * position). Coordinación and asistencia grant "gestión" access; gerencia and
+ * administración are standalone admin accounts. Admins edit all of it from the app.
+ */
 export const DEFAULT_POSITIONS: Array<Pick<Position, "id" | "title" | "area" | "grantsAdmin" | "order">> = [
   { id: "coordinador-produccion", title: "Coordinador de producción", area: "Producción", grantsAdmin: true, order: 1 },
-  { id: "tornero-1", title: "Tornero", area: "Torneado", grantsAdmin: false, order: 2 },
-  { id: "tornero-2", title: "Tornero 2", area: "Torneado", grantsAdmin: false, order: 3 },
-  { id: "tornero-3", title: "Tornero 3", area: "Torneado", grantsAdmin: false, order: 4 },
-  { id: "programador-cnc", title: "Programador CNC", area: "CNC", grantsAdmin: false, order: 5 },
-  { id: "fresadora", title: "Fresadora", area: "Fresado", grantsAdmin: false, order: 6 },
-  { id: "soldador", title: "Soldador", area: "Soldadura", grantsAdmin: false, order: 7 },
+  { id: "asistente-administrativa", title: "Asistente administrativa", area: "Administración", grantsAdmin: true, order: 2 },
+  { id: "programador-cnc", title: "Programador CNC", area: "CNC", grantsAdmin: false, order: 3 },
+  { id: "soldador", title: "Soldadura, mecánica de banco, prensa y pintura", area: "Soldadura", grantsAdmin: false, order: 4 },
+  { id: "fresadora", title: "Fresadora, cepillo y torno", area: "Fresado", grantsAdmin: false, order: 5 },
+  { id: "tornero-1", title: "Tornero", area: "Torneado", grantsAdmin: false, order: 6 },
 ];
 
 /**
@@ -24,13 +27,14 @@ export const DEFAULT_MACHINES: Array<Pick<Machine, "id" | "name" | "process" | "
   { id: "cnc-2", name: "CNC²", process: "cnc", description: "Próxima compra", state: "inactiva", order: 2, positionId: "programador-cnc" },
   { id: "torno-cnc", name: "Torno CNC", process: "cnc", description: "Próxima compra", state: "inactiva", order: 3, positionId: "programador-cnc" },
   { id: "pinacho", name: "Pinacho", process: "torno", description: "Torno convencional", state: "activa", order: 4, positionId: "tornero-1" },
-  { id: "wkt", name: "WKT", process: "torno", description: "Torno convencional", state: "activa", order: 5, positionId: "tornero-2" },
-  { id: "bouchi", name: "Bouchi", process: "torno", description: "Torno convencional", state: "activa", order: 6, positionId: "tornero-3" },
+  { id: "wkt", name: "WKT", process: "torno", description: "Torno convencional", state: "activa", order: 5, positionId: "tornero-1" },
+  { id: "bouchi", name: "Bouchi", process: "torno", description: "Torno convencional", state: "activa", order: 6, positionId: "tornero-1" },
   { id: "fresadora", name: "Fresadora", process: "fresadora", description: "Fresadora universal", state: "activa", order: 7, positionId: "fresadora" },
-  { id: "cepillo", name: "Cepillo", process: "cepillo", description: "", state: "activa", order: 8, positionId: null },
-  { id: "prensa", name: "Prensa hidráulica", process: "prensa", description: "", state: "activa", order: 9, positionId: null },
+  { id: "cepillo", name: "Cepillo", process: "cepillo", description: "", state: "activa", order: 8, positionId: "fresadora" },
+  { id: "prensa", name: "Prensa hidráulica", process: "prensa", description: "", state: "activa", order: 9, positionId: "soldador" },
   { id: "soldadura", name: "Soldadura", process: "soldadura", description: "Estación de soldadura", state: "activa", order: 10, positionId: "soldador" },
-  { id: "banco", name: "Mecánica de banco", process: "banco", description: "Ajuste y ensamble", state: "activa", order: 11, positionId: null },
+  { id: "banco", name: "Mecánica de banco", process: "banco", description: "Ajuste y ensamble", state: "activa", order: 11, positionId: "soldador" },
+  { id: "pintura", name: "Pintura", process: "pintura", description: "Estación de pintura", state: "activa", order: 12, positionId: "soldador" },
 ];
 
 export function defaultMachines(now: string): Collection<Machine> {
@@ -51,7 +55,7 @@ export function defaultMachines(now: string): Collection<Machine> {
 }
 
 /** Areas drive the station icon and 3D model shown in the HUD. */
-export const AREAS = ["Producción", "Torneado", "CNC", "Fresado", "Soldadura", "Mantenimiento", "Almacén", "Calidad", "Otro"] as const;
+export const AREAS = ["Producción", "Administración", "Torneado", "CNC", "Fresado", "Soldadura", "Mantenimiento", "Almacén", "Calidad", "Otro"] as const;
 
 export function emptyCollection<T>(): Collection<T> {
   return { schema: 1, seq: 0, items: [] };
@@ -61,20 +65,23 @@ export function defaultSettings(now: string): Settings {
   return {
     workshopName: process.env.NEXT_PUBLIC_TALLER_NAME?.trim() || "Procesos productivos S.M.I.",
     timezone: process.env.TALLER_TIMEZONE?.trim() || DEFAULT_TIMEZONE,
-    registrationOpen: true,
+    registrationOpen: false,
+    staffLogin: false,
+    boardToken: null,
     registrationCodeHash: null,
     bootstrapAdmins: [],
     maxPendingRegistrations: 25,
     legal: {
-      companyName: "",
-      tradeName: "",
-      nit: "",
-      address: "",
-      city: "",
-      email: "",
-      phone: "",
+      // Public company data of S.M.I. (also on its website); editable in Ajustes.
+      companyName: "SMI Servi Mecanizados Industriales SAS",
+      tradeName: "SMI Servi Mecanizados Industriales SAS",
+      nit: "901.469.738-9",
+      address: "Cra 18 # 9 38",
+      city: "Buga, Valle",
+      email: "servimecanizadosindustriales@gmail.com",
+      phone: "(57) 3158871953",
       privacyContact: "",
-      website: "",
+      website: "http://cliente-2-eight.vercel.app",
       policyVersion: LEGAL_POLICY_VERSION,
     },
     production: productionSettingsSchema.parse({}),

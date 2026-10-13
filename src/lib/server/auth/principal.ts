@@ -1,5 +1,5 @@
 import "server-only";
-import { evaluateAccess, type AccessDenialReason } from "@/lib/domain/contracts";
+import { evaluateAccess, type AccessDenialReason, type AdminScope } from "@/lib/domain/contracts";
 import type { Position, Settings, User } from "@/lib/domain/schema";
 import { todayIn } from "@/lib/domain/time";
 import { getDb } from "../store";
@@ -9,6 +9,8 @@ export interface Principal {
   user: User;
   position: Position | null;
   isAdmin: boolean;
+  /** total = todo; gestion = operación sin configuración, equipo ni sueldos; null = operario. */
+  scope: AdminScope | null;
   settings: Settings;
   today: string;
   claims: SessionClaims;
@@ -41,7 +43,7 @@ export async function resolvePrincipal(): Promise<PrincipalResult> {
   if (!user || user.sessionVersion !== claims.sv) return { status: "anonymous" };
 
   const today = todayIn(settings.timezone);
-  const access = evaluateAccess(user, positions.items, today);
+  const access = evaluateAccess(user, positions.items, today, { staffLogin: settings.staffLogin });
   if (!access.ok) return { status: "denied", reason: access.reason, startDate: access.startDate };
 
   return {
@@ -50,12 +52,18 @@ export async function resolvePrincipal(): Promise<PrincipalResult> {
       user,
       position: access.position,
       isAdmin: access.isAdmin,
+      scope: access.scope,
       settings,
       today,
       claims,
       incomplete: isIncomplete(user, settings),
     },
   };
+}
+
+/** Gerencia y administración: configuration, team, salaries and audit. */
+export function isOwner(principal: Pick<Principal, "isAdmin" | "scope">): boolean {
+  return principal.isAdmin && principal.scope === "total";
 }
 
 export async function getPrincipal(): Promise<Principal | null> {

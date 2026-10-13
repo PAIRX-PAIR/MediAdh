@@ -541,20 +541,37 @@ function PositionModal({ position, onClose }: { position: PositionView | null; o
 
 function AccountModal({ onClose }: { onClose: () => void }) {
   const { data } = useSync();
-  const [form, setForm] = useState({ displayName: "", username: "", tempPassword: "", phone: "", kind: "staff" as "staff" | "admin", positionId: "", start: data.today, end: addDays(data.today, 90) });
+  const [form, setForm] = useState({
+    displayName: "",
+    username: "",
+    tempPassword: "",
+    phone: "",
+    kind: "staff" as "staff" | "admin",
+    adminScope: "total" as "total" | "gestion",
+    positionId: "",
+    start: data.today,
+    end: "",
+  });
   const { run, busy } = useAction();
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
+  // Operarios don't sign in (unless Ajustes allows it); coordinación and asistencia positions do.
+  const position = data.positions.find((p) => p.id === form.positionId);
+  const needsLogin = form.kind === "admin" || Boolean(position?.grantsAdmin) || data.settings.staffLogin;
   return (
     <Modal
       open
       onClose={onClose}
-      title="Crear cuenta"
-      description="La persona entra con esta contraseña temporal y debe cambiarla y autorizar el tratamiento de datos."
+      title={needsLogin ? "Crear cuenta" : "Registrar operario"}
+      description={
+        needsLogin
+          ? "La persona entra con esta contraseña temporal y debe cambiarla y autorizar el tratamiento de datos."
+          : "Los operarios no inician sesión: quedan registrados para sus máquinas, el tablero del taller, las tareas y la nómina."
+      }
       size="md"
       footer={
         <Button
           loading={busy === "a"}
-          disabled={!form.displayName || !form.username || form.tempPassword.length < 12 || (form.kind === "staff" && !form.positionId)}
+          disabled={!form.displayName || (needsLogin && (!form.username || form.tempPassword.length < 12)) || (form.kind === "staff" && !form.positionId)}
           icon={<UserPlus className="size-4" />}
           onClick={async () => {
             const ok = await run(
@@ -562,15 +579,16 @@ function AccountModal({ onClose }: { onClose: () => void }) {
               () =>
                 api.admin.createAccount({
                   displayName: form.displayName,
-                  username: form.username,
-                  tempPassword: form.tempPassword,
+                  username: needsLogin ? form.username : "",
+                  tempPassword: needsLogin ? form.tempPassword : "",
+                  adminScope: form.adminScope,
                   phone: form.phone || null,
                   kind: form.kind,
                   positionId: form.kind === "staff" ? form.positionId : null,
                   startDate: form.start,
                   endDate: form.end || null,
                 }),
-              "Cuenta creada",
+              needsLogin ? "Cuenta creada" : "Operario registrado",
             );
             if (ok) onClose();
           }}
@@ -585,17 +603,31 @@ function AccountModal({ onClose }: { onClose: () => void }) {
           value={form.kind}
           onChange={(v) => set("kind", v)}
           options={[
-            { value: "staff", label: "Operario" },
+            { value: "staff", label: "Con puesto" },
             { value: "admin", label: "Administrador" },
           ]}
           className="[&>button]:flex-1 [&>button]:justify-center"
         />
+        {form.kind === "admin" && (
+          <Field label="Acceso" hint="Gestión: opera todo, pero no cambia Ajustes, Equipo, sueldos ni ve la auditoría.">
+            {(id, d) => (
+              <Select id={id} aria-describedby={d} value={form.adminScope} onChange={(e) => set("adminScope", e.target.value as "total" | "gestion")}>
+                <option value="total">Total (gerencia y administración)</option>
+                <option value="gestion">Gestión (coordinación y asistencia)</option>
+              </Select>
+            )}
+          </Field>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Nombre completo">{(id) => <Input id={id} value={form.displayName} onChange={(e) => set("displayName", e.target.value)} />}</Field>
-          <Field label="Usuario">{(id) => <Input id={id} autoCapitalize="none" value={form.username} onChange={(e) => set("username", e.target.value.toLowerCase())} />}</Field>
-          <Field label="Contraseña temporal" hint="Mínimo 12 caracteres.">
-            {(id, d) => <Input id={id} aria-describedby={d} autoComplete="new-password" value={form.tempPassword} onChange={(e) => set("tempPassword", e.target.value)} />}
-          </Field>
+          {needsLogin && (
+            <>
+              <Field label="Usuario">{(id) => <Input id={id} autoCapitalize="none" value={form.username} onChange={(e) => set("username", e.target.value.toLowerCase())} />}</Field>
+              <Field label="Contraseña temporal" hint="Mínimo 12 caracteres.">
+                {(id, d) => <Input id={id} aria-describedby={d} autoComplete="new-password" value={form.tempPassword} onChange={(e) => set("tempPassword", e.target.value)} />}
+              </Field>
+            </>
+          )}
           <Field label="Celular">{(id) => <Input id={id} type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} />}</Field>
         </div>
         {form.kind === "staff" && (
