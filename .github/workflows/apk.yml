@@ -38,6 +38,10 @@ jobs:
           java-version: "17"
 
       - uses: android-actions/setup-android@v3
+        with:
+          # The default list includes the retired "tools" package, which makes sdkmanager fail.
+          packages: "platform-tools"
+          log-accepted-android-sdk-licenses: false
 
       - uses: actions/setup-node@v4
         with:
@@ -60,6 +64,11 @@ jobs:
           sed "s/REEMPLAZAR-CON-EL-DOMINIO.vercel.app/${HOST}/g" android/twa-manifest.json \
             | jq --arg v "$VERSION_NAME" --argjson c "$VERSION_CODE" '.appVersionName=$v | .appVersionCode=$c' > twa/twa-manifest.json
           echo "$KEYSTORE_B64" | base64 -d > twa/android.keystore
+          # Bubblewrap validates the SDK by its legacy "tools" folder; point it at the current cmdline-tools.
+          if [ ! -e "$ANDROID_SDK_ROOT/tools" ]; then
+            latest="$(ls -d "$ANDROID_SDK_ROOT"/cmdline-tools/* | sort -V | tail -1)"
+            sudo ln -s "$latest" "$ANDROID_SDK_ROOT/tools"
+          fi
           mkdir -p ~/.bubblewrap
           printf '{"jdkPath":"%s","androidSdkPath":"%s"}' "$JAVA_HOME" "$ANDROID_SDK_ROOT" > ~/.bubblewrap/config.json
           yes | sdkmanager --licenses > /dev/null || true
