@@ -21,7 +21,7 @@ import type {
   WorkItem,
 } from "@/lib/domain/schema";
 import { addDays, daysBetween, isRealDate, zonedInstant } from "@/lib/domain/time";
-import type { Principal } from "../auth/principal";
+import { isOwner, type Principal } from "../auth/principal";
 import { badRequest, conflict, forbidden, notFound } from "../http";
 import { getDb } from "../store";
 import { actorOf, audit, folio, newId, nextSeq, nowIso, pushNotification, track, type Actor } from "./common";
@@ -685,7 +685,9 @@ export async function createHistoricalOrder(principal: Principal, input: Histori
 export async function deleteOrder(principal: Principal, id: string) {
   await getDb().transact(["orders", "tasks", "attachments", "audit"], "Elimina una orden de trabajo", (docs) => {
     const order = findOrder(docs.orders, id);
-    if (!order.historical && order.status !== "cancelada") {
+    // Gerencia y administración pueden borrar cualquier orden (por ejemplo, una prueba);
+    // los demás solo las canceladas o históricas.
+    if (!isOwner(principal) && !order.historical && order.status !== "cancelada") {
       throw forbidden("Solo se eliminan órdenes canceladas o registros históricos. Cancela la orden primero.");
     }
     docs.orders.items = docs.orders.items.filter((o) => o.id !== id);

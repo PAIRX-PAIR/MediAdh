@@ -505,3 +505,16 @@ describe("ganancias del mes", () => {
     await expect(finance.financeReport(admin, "2026-13")).rejects.toMatchObject({ status: 400 });
   });
 });
+
+describe("eliminar órdenes", () => {
+  it("gerencia puede borrar una orden entregada; gestión no", async () => {
+    const { admin, t1 } = await setup();
+    const { order } = await orders.createOrder(admin, baseOrder());
+    await orders.orderAction(admin, order.id, { action: "deliver", satisfaction: null, finalPrice: null });
+    await expect(orders.deleteOrder(t1, order.id)).rejects.toMatchObject({ status: 403 });
+    const owner = { ...admin, scope: "total" as const };
+    await orders.deleteOrder(owner, order.id);
+    const { orders: list } = await db.read(["orders"]);
+    expect(list.items.some((o) => o.id === order.id)).toBe(false);
+  });
+});
