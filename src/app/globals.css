@@ -115,6 +115,16 @@
 }
 
 @layer base {
+  /*
+   * A grid without explicit columns gets one "auto" track, which grows to the
+   * longest nowrap/truncated text and pushes the page wider than the phone
+   * (empty space when swiping sideways). One shrinkable column by default;
+   * grid-cols-* utilities (utilities layer) still win where they apply.
+   */
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   :root {
     color-scheme: dark;
     --hud-grid: rgb(94 200 255 / 0.05);

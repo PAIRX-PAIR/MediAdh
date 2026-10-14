@@ -211,7 +211,7 @@ function ScheduleSection() {
             </div>
             <div className="flex flex-1 flex-wrap items-center gap-2">
               {shifts.map((shift, i) => (
-                <div key={i} className="flex items-center gap-1 rounded-lg border border-line px-2 py-1">
+                <div key={i} className="flex max-w-full flex-wrap items-center gap-1 rounded-lg border border-line px-2 py-1">
                   <TimeInput
                     aria-label={`${WEEKDAY_LABEL[day + 1]} turno ${i + 1} desde`}
                     className="h-9"
