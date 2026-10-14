@@ -470,5 +470,8 @@ export const api = {
     setPay: (userId: string, input: { monthlySalary?: number | null; transportAllowance?: boolean }) =>
       request<{ ok: true }>(`/api/admin/users/${encodeURIComponent(userId)}/pay`, { method: "PATCH", body: input }),
     updateSettings: (payroll: Partial<PayrollSettings>) => request<{ ok: true }>("/api/admin/settings", { method: "PATCH", body: { payroll } }),
+    addAdjustment: (input: { userId: string; quincena: string; kind: "bono" | "descuento"; concept: string; amount: number }) =>
+      request<{ adjustment: unknown }>("/api/admin/pagos/ajustes", { method: "POST", body: input }),
+    removeAdjustment: (id: string) => request<{ ok: true }>(`/api/admin/pagos/ajustes/${encodeURIComponent(id)}`, { method: "DELETE" }),
   },
 };

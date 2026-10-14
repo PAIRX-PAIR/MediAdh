@@ -98,14 +98,14 @@ export const GET = route({ access: "admin" }, async ({ req, principal }) => {
       [
         "Persona", "Sueldo mensual", "Valor hora", "Básico quincena", "Horas trabajadas", "Horas del horario",
         ...HOUR_KINDS.flatMap((k) => [`${HOUR_KIND_LABEL[k]} (h)`, `${HOUR_KIND_LABEL[k]} ($)`]),
-        "Total extras", "Auxilio de transporte", "Devengado", "Salud", "Pensión", "Neto a pagar", "Registros sin salida",
+        "Total extras", "Auxilio de transporte", "Bonificaciones", "Devengado", "Salud", "Pensión", "Descuentos", "Neto a pagar", "Registros sin salida",
       ],
     ];
     for (const l of report.lines) {
       rows.push([
         l.name, l.monthlySalary, l.hourlyValue, l.basic, hours(l.workedHours), hours(l.scheduledHours),
         ...HOUR_KINDS.flatMap((k) => [hours(l.hours[k]), l.amounts[k]]),
-        l.extrasTotal, l.transport, l.earned, l.health, l.pension, l.net, l.openEntries,
+        l.extrasTotal, l.transport, l.bonuses, l.earned, l.health, l.pension, l.otherDeductions, l.net, l.openEntries,
       ]);
     }
     rows.push([], ["Detalle de registros"], ["Persona", "Fecha", "Entrada", "Salida", "Nota", "Origen"]);

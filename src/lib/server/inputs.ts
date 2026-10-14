@@ -282,3 +282,11 @@ export const payInput = z
     transportAllowance: z.boolean(),
   })
   .partial();
+
+export const payAdjustmentInput = z.object({
+  userId: entityId,
+  quincena: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])-[12]$/, "Quincena inválida"),
+  kind: z.enum(["bono", "descuento"]),
+  concept: requiredText(80),
+  amount: money,
+});

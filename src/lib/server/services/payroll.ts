@@ -123,7 +123,7 @@ export function payrollPeopleFor(docs: Pick<Database, "users" | "positions">, en
 export async function payrollReport(principal: Principal, key: string | null) {
   const quincena: Quincena | null = key ? quincenaByKey(key) : quincenaOf(principal.today);
   if (!quincena) throw badRequest("Quincena inválida (usa AAAA-MM-1 o AAAA-MM-2).");
-  const docs = await getDb().read(["attendance", "settings", "users", "positions"]);
+  const docs = await getDb().read(["attendance", "settings", "users", "positions", "payAdjustments"]);
   const entries = docs.attendance.items
     .filter((e) => e.date >= quincena.from && e.date <= quincena.to)
     .sort((a, b) => (a.date === b.date ? a.start.localeCompare(b.start) : a.date.localeCompare(b.date)));
@@ -138,7 +138,15 @@ export async function payrollReport(principal: Principal, key: string | null) {
     current: quincenaOf(principal.today).key,
     settings: docs.settings.payroll,
     people,
-    lines: liquidate({ people, entries, quincena, calendar: calendarOf(docs.settings), settings: docs.settings.payroll }),
+    lines: liquidate({
+      people,
+      entries,
+      quincena,
+      calendar: calendarOf(docs.settings),
+      settings: docs.settings.payroll,
+      // Bonuses and deductions are money: only gerencia/administración see them.
+      adjustments: owner ? docs.payAdjustments.items : [],
+    }),
     entries: entries.map(({ history: _h, ...rest }) => {
       void _h;
       return rest;
@@ -225,5 +233,37 @@ export async function setPay(principal: Principal, userId: string, input: { mont
     if (input.transportAllowance !== undefined) user.transportAllowance = input.transportAllowance;
     user.updatedAt = nowIso();
     audit(log, actorOf(principal), "sueldo_actualizado", user.id, user.username);
+  });
+}
+
+export interface PayAdjustmentInput {
+  userId: string;
+  quincena: string;
+  kind: "bono" | "descuento";
+  concept: string;
+  amount: number;
+}
+
+/** Bonificación o descuento de una quincena (gerencia y administración). */
+export async function addPayAdjustment(principal: Principal, input: PayAdjustmentInput) {
+  if (!quincenaByKey(input.quincena)) throw badRequest("Quincena inválida.");
+  if (input.amount <= 0) throw badRequest("El valor debe ser mayor que cero.");
+  return getDb().transact(["payAdjustments", "users", "audit"], "Registra un ajuste de pago", ({ payAdjustments, users, audit: log }) => {
+    const user = users.items.find((u) => u.id === input.userId);
+    if (!user) throw notFound("La persona no existe.");
+    const entry = { id: newId(), ...input, createdBy: principal.user.id, createdAt: nowIso() };
+    payAdjustments.items.push(entry);
+    // The amount stays out of the audit log (who and what, not how much).
+    audit(log, actorOf(principal), input.kind === "bono" ? "bonificacion_registrada" : "descuento_registrado", user.id, `${user.username} · ${input.quincena} · ${input.concept}`);
+    return entry;
+  });
+}
+
+export async function removePayAdjustment(principal: Principal, id: string) {
+  await getDb().transact(["payAdjustments", "audit"], "Quita un ajuste de pago", ({ payAdjustments, audit: log }) => {
+    const entry = payAdjustments.items.find((a) => a.id === id);
+    if (!entry) throw notFound();
+    payAdjustments.items = payAdjustments.items.filter((a) => a.id !== id);
+    audit(log, actorOf(principal), "ajuste_pago_eliminado", entry.userId, `${entry.quincena} · ${entry.concept}`);
   });
 }

@@ -80,6 +80,19 @@ test.describe("consola del coordinador", () => {
     await expect(page.getByText(/Total semanal:\s*42 h/)).toBeVisible();
   });
 
+  test("en Equipo se editan los pagos de cada persona (sueldo, bonos y descuentos)", async ({ page }) => {
+    await page.goto("/admin/equipo?tab=cuentas");
+    await page.getByRole("row", { name: /Carlos Pérez/ }).getByRole("button", { name: /Pagos/ }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("heading", { name: /Pagos · Carlos Pérez/ })).toBeVisible();
+    await expect(dialog.getByLabel("Sueldo mensual")).toHaveValue(/[0-9]/);
+    await dialog.getByLabel("Concepto").fill("Anticipo e2e");
+    await dialog.getByLabel("Valor").fill("50000");
+    await dialog.getByRole("button", { name: "Agregar" }).click();
+    await expect(dialog.getByText("Descuento · Anticipo e2e")).toBeVisible();
+    await expect(dialog.getByText("Descuentos", { exact: true })).toBeVisible();
+  });
+
   test("los títulos de pestaña son los de cada pantalla", async ({ page }) => {
     for (const [path, title] of [
       ["/admin/solicitudes", "Pedidos de material"],

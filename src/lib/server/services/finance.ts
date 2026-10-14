@@ -15,7 +15,7 @@ import { payrollPeopleFor } from "./payroll";
 export async function financeReport(principal: Principal, monthParam: string | null) {
   const month = monthParam ?? principal.today.slice(0, 7);
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw badRequest("Mes inválido (AAAA-MM).");
-  const docs = await getDb().read(["orders", "attendance", "settings", "users", "positions"]);
+  const docs = await getDb().read(["orders", "attendance", "settings", "users", "positions", "payAdjustments"]);
   const tz = docs.settings.timezone;
 
   const delivered = docs.orders.items
@@ -32,6 +32,11 @@ export async function financeReport(principal: Principal, monthParam: string | n
     }))
     .sort((a, b) => a.deliveredOn.localeCompare(b.deliveredOn));
   const sales = delivered.reduce((s, o) => s + o.price, 0);
+  // Open jobs with a price due this month: what is still to come in sales.
+  const pending = docs.orders.items.filter(
+    (o) => ["recibida", "en_proceso", "terminada", "garantia"].includes(o.status) && !o.deliveredAt && o.due?.date.startsWith(month),
+  );
+  const pendingSales = pending.reduce((s, o) => s + (o.finalPrice ?? o.price ?? 0), 0);
   const supplies = delivered.reduce((s, o) => s + o.supplies, 0);
   const withoutPrice = delivered.filter((o) => o.price === 0).length;
 
@@ -40,14 +45,15 @@ export async function financeReport(principal: Principal, monthParam: string | n
   const q2 = quincenaByKey(`${month}-2`)!;
   const entries = docs.attendance.items.filter((e) => e.date >= q1.from && e.date <= q2.to);
   const people = payrollPeopleFor(docs, entries, principal.today);
-  const lines1 = liquidate({ people, entries, quincena: q1, calendar, settings: docs.settings.payroll });
-  const lines2 = liquidate({ people, entries, quincena: q2, calendar, settings: docs.settings.payroll });
+  const adjustments = docs.payAdjustments.items;
+  const lines1 = liquidate({ people, entries, quincena: q1, calendar, settings: docs.settings.payroll, adjustments });
+  const lines2 = liquidate({ people, entries, quincena: q2, calendar, settings: docs.settings.payroll, adjustments });
   const employerPct = docs.settings.finance.employerCostPct / 100;
   const payroll = people.map((p, i) => {
     const a = lines1[i]!;
     const b = lines2[i]!;
-    // Employer contributions and benefits apply to salary + overtime, not to the transport allowance.
-    const employer = Math.round((a.earned - a.transport + b.earned - b.transport) * employerPct);
+    // Employer contributions and benefits apply to salary + overtime (not transport allowance or bonuses).
+    const employer = Math.round((a.basic + a.extrasTotal + b.basic + b.extrasTotal) * employerPct);
     return {
       userId: p.id,
       name: p.displayName,
@@ -84,6 +90,11 @@ export async function financeReport(principal: Principal, monthParam: string | n
     profit,
     orders: delivered,
     withoutPrice,
+    pendingSales,
+    pendingCount: pending.length,
+    /** The month is not over: the second quincena and the profit are projections. */
+    projected: principal.today < q2.to,
+    q2Projected: principal.today < q2.from,
     missingSalaries: payroll.filter((p) => p.monthlySalary === null).map((p) => p.name),
     payroll,
     goals: { ...goals, value: basisValue, progress: goalProgress(basisValue, goals.goals) },

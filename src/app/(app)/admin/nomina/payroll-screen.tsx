@@ -11,6 +11,7 @@ import { useAction } from "@/lib/client/use-action";
 import { formatDate } from "@/lib/domain/labels";
 import { HOUR_KINDS, HOUR_KIND_LABEL, hourFactor, type PayrollLine } from "@/lib/domain/payroll";
 import { formatCop } from "@/lib/domain/quote";
+import { AdjustmentsEditor } from "@/components/production/pay-editor";
 import type { PayrollSettings } from "@/lib/domain/schema";
 
 const hrs = (n: number) => `${n.toLocaleString("es-CO", { maximumFractionDigits: 2 })} h`;
@@ -246,6 +247,12 @@ function PersonModal({ report, line, onClose, onChanged }: { report: PayrollRepo
                 <span className="text-ink-soft">Auxilio de transporte</span>
                 <span className="tabular text-ink">{formatCop(line.transport)}</span>
               </li>
+              {line.bonuses > 0 && (
+                <li className="flex justify-between gap-3">
+                  <span className="text-ink-soft">Bonificaciones</span>
+                  <span className="tabular text-ink">{formatCop(line.bonuses)}</span>
+                </li>
+              )}
               <li className="flex justify-between gap-3 border-t border-line pt-1">
                 <span className="text-ink-soft">Devengado</span>
                 <span className="tabular text-ink">{formatCop(line.earned)}</span>
@@ -256,11 +263,19 @@ function PersonModal({ report, line, onClose, onChanged }: { report: PayrollRepo
                 </span>
                 <span className="tabular text-ink">− {formatCop(line.health + line.pension)}</span>
               </li>
+              {line.otherDeductions > 0 && (
+                <li className="flex justify-between gap-3">
+                  <span className="text-ink-soft">Descuentos (anticipos, préstamos…)</span>
+                  <span className="tabular text-ink">− {formatCop(line.otherDeductions)}</span>
+                </li>
+              )}
               <li className="flex justify-between gap-3 border-t border-line pt-1 font-semibold">
                 <span className="text-ink">Neto a pagar</span>
                 <span className="tabular text-glow">{formatCop(line.net)}</span>
               </li>
             </ul>
+            <h4 className="mb-2 mt-4 text-sm font-semibold text-ink">Bonificaciones y descuentos de esta quincena</h4>
+            <AdjustmentsEditor userId={line.userId} report={report} onChanged={onChanged} />
           </section>
         )}
 

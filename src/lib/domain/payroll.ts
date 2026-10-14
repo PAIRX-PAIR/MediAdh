@@ -1,5 +1,5 @@
 import { holidayName, isoWeekday, minutesOf, shiftsOn, type WorkCalendar } from "./calendar";
-import type { Attendance, PayrollSettings } from "./schema";
+import type { Attendance, PayAdjustment, PayrollSettings } from "./schema";
 import { addDays } from "./time";
 
 /**
@@ -207,6 +207,11 @@ export interface PayrollLine {
   amounts: Record<HourKind, number>;
   extrasTotal: number;
   transport: number;
+  /** Bonificaciones de la quincena (outside the social-security base). */
+  bonuses: number;
+  /** Descuentos puntuales (anticipos, préstamos…) taken off the net pay. */
+  otherDeductions: number;
+  adjustments: Array<Pick<PayAdjustment, "id" | "kind" | "concept" | "amount">>;
   earned: number;
   health: number;
   pension: number;
@@ -225,6 +230,7 @@ export function liquidate(input: {
   quincena: Quincena;
   calendar: WorkCalendar;
   settings: PayrollSettings;
+  adjustments?: PayAdjustment[];
 }): PayrollLine[] {
   const { quincena, calendar, settings } = input;
   const dates = datesOf(quincena);
@@ -248,7 +254,10 @@ export function liquidate(input: {
     const base = basic + extrasTotal;
     const health = peso((base * settings.healthPct) / 100);
     const pension = peso((base * settings.pensionPct) / 100);
-    const earned = base + transport;
+    const adjustments = (input.adjustments ?? []).filter((a) => a.userId === person.id && a.quincena === quincena.key);
+    const bonuses = adjustments.filter((a) => a.kind === "bono").reduce((s, a) => s + a.amount, 0);
+    const otherDeductions = adjustments.filter((a) => a.kind === "descuento").reduce((s, a) => s + a.amount, 0);
+    const earned = base + transport + bonuses;
     return {
       userId: person.id,
       name: person.displayName,
@@ -260,10 +269,13 @@ export function liquidate(input: {
       amounts,
       extrasTotal,
       transport,
+      bonuses,
+      otherDeductions,
+      adjustments: adjustments.map(({ id, kind, concept, amount }) => ({ id, kind, concept, amount })),
       earned,
       health,
       pension,
-      net: earned - health - pension,
+      net: earned - health - pension - otherDeductions,
       workedHours: days.reduce((sum, d) => sum + d.workedMinutes, 0) / 60,
       scheduledHours: days.reduce((sum, d) => sum + d.scheduledMinutes, 0) / 60,
       openEntries: days.reduce((sum, d) => sum + d.openEntries, 0),
