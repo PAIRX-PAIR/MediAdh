@@ -128,14 +128,14 @@ export function CommandScreen() {
         >
           <span id="puestos-title">Puestos</span>
         </SectionTitle>
-        <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {data.positions.map((p) => {
             const vacant = !p.holder;
             return (
-              <li key={p.id}>
+              <li key={p.id} className="min-w-0">
                 <Link href={`/admin/equipo?puesto=${p.id}`} className="hud-panel flex flex-col gap-1 p-4 transition-colors hover:border-glow/50">
                   <span className="flex items-center justify-between gap-2">
-                    <span className="truncate font-semibold text-ink">{p.title}</span>
+                    <span className="min-w-0 truncate font-semibold text-ink">{p.title}</span>
                     <Chip tone={vacant ? "vacant" : p.status === "por_vencer" ? "pending" : "done"}>{CONTRACT_STATUS_LABEL[p.status]}</Chip>
                   </span>
                   <span className="truncate text-sm text-muted">{p.holder?.name ?? "Sin titular"}</span>

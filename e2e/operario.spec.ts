@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { WORKER, signIn, watchConsole } from "./helpers";
+import { ADMIN, WORKER, signIn, watchConsole } from "./helpers";
 
 test.describe("operario en el celular", () => {
   test("ve su cola en el tablero del taller sin iniciar sesión", async ({ page }) => {
@@ -27,5 +27,32 @@ test.describe("operario en el celular", () => {
     await signIn(page, WORKER);
     await expect(page.getByRole("dialog").getByRole("alert")).toContainText("tablero del taller");
     expect((await page.request.get("/api/admin/kpis")).status()).toBe(401);
+  });
+});
+
+test.describe("pantallas en el celular", () => {
+  test("ninguna pantalla del admin se sale del ancho (sin espacio vacío al deslizar)", async ({ page }) => {
+    await signIn(page, ADMIN);
+    await expect(page).toHaveURL(/\/admin$/);
+    for (const path of ["/admin", "/admin/ordenes", "/admin/cola", "/admin/cotizador", "/admin/finanzas", "/admin/nomina", "/admin/equipo", "/admin/ajustes", "/admin/dispositivos"]) {
+      await page.goto(path);
+      await page.waitForLoadState("networkidle");
+      const { scroll, client, culprits } = await page.evaluate(() => {
+        const cw = document.documentElement.clientWidth;
+        const clipped = (e: Element) => {
+          for (let q = e.parentElement; q && q !== document.body; q = q.parentElement) {
+            const s = getComputedStyle(q);
+            if (s.overflowX !== "visible" || s.position === "fixed") return true;
+          }
+          return false;
+        };
+        const culprits = [...document.querySelectorAll("body *")]
+          .filter((e) => e.getBoundingClientRect().right > cw + 1 && getComputedStyle(e).position !== "fixed" && !clipped(e))
+          .slice(0, 4)
+          .map((e) => `${e.tagName}.${String((e as HTMLElement).className).slice(0, 80)} «${(e.textContent ?? "").slice(0, 30)}»`);
+        return { scroll: document.documentElement.scrollWidth, client: cw, culprits };
+      });
+      expect(scroll, `${path} se sale del ancho: ${culprits.join(" | ")}`).toBeLessThanOrEqual(client);
+    }
   });
 });
