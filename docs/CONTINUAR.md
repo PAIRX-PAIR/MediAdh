@@ -1,6 +1,6 @@
 # Cómo continuar el proyecto
 
-Rama: `claude/smi-information-6393uk` · PR en borrador #1.
+Rama: `main` (producción en https://smi-taller.vercel.app). Estado: entregada y en uso.
 Última verificación local (13-oct-2026): `npm run check` (tsc + eslint + 60 tests Vitest), `next build`, `npm run test:e2e` (18 pruebas Playwright en escritorio y celular), revisión de seguridad y de código aplicadas.
 
 ## Arranque local
@@ -28,14 +28,13 @@ Administrador real: `judago` (declarado con `ADMIN_BOOTSTRAP_*` en `.env.local`;
 - **APK**: `android/twa-manifest.json`, `/.well-known/assetlinks.json` desde variables, workflow de Bubblewrap (`.github/workflows/apk.yml`), guía `docs/APK.md`.
 - **Calidad**: CI (`.github/workflows/ci.yml`: check, build, e2e).
 
-## Pendiente (requiere al dueño de las cuentas)
+## Pendiente (lo carga el dueño dentro de la app)
 
-1. **Despliegue en Vercel**: seguir `docs/DESPLIEGUE.md` (repo privado de datos, token fine-grained, variables, regla de firewall).
-2. **APK**: crear el keystore, cargar los secretos y ejecutar el workflow (`docs/APK.md`).
-3. **Nómina**: cargar el sueldo de cada operario y el valor del auxilio de transporte del año (Nómina → Reglas) y validar las reglas con el contador.
-4. **IPC del DANE**: descargar el anexo «Índices – series de empalme» y pegarlo en Ajustes → IPC.
-5. **Prueba en celulares reales** (iPhone en pantalla de inicio y Android) de avisos push y del hero 3D.
+1. Tarifa de Pintura y fechas de ingreso reales del equipo (contratos).
+2. Tabla del IPC del DANE (Ajustes → IPC).
+3. Validar con el contador las reglas de nómina y la carga prestacional (54 %).
+4. Rotar el token de datos de GitHub si se filtra (Vercel → GITHUB_DATA_TOKEN).
 
-## Mejoras opcionales (no hechas)
+## Mejoras
 
 QR por OT, enviar aviso por WhatsApp al cliente, margen real vs cotizado en un reporte propio, cargar solo las particiones recientes de órdenes en cada escritura (hoy cada escritura de tareas lee todas las órdenes; suficiente para años de uso de un taller pequeño).
