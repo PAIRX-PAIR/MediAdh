@@ -133,24 +133,28 @@ export function OrderDetailModal({ orderId, onClose, onEdit, initialTab = "resum
         </Button>
       )}
       {s === "cancelada" && (
-        <>
-          <Button size="sm" variant="secondary" icon={<RotateCcw className="size-4" />} onClick={() => void act("reopen", { action: "reopen" }, "Orden reabierta")}>
-            Reabrir
-          </Button>
-          <Button
-            size="sm"
-            variant="danger"
-            icon={<Trash2 className="size-4" />}
-            onClick={async () => {
-              if (await confirm({ title: `¿Eliminar ${order.folio}?`, body: "Se borra la orden cancelada. Esta acción no se puede deshacer.", confirmLabel: "Eliminar", danger: true })) {
-                const ok = await run("delete", () => api.orders.remove(order.id), "Orden eliminada");
-                if (ok) onClose();
-              }
-            }}
-          >
-            Eliminar
-          </Button>
-        </>
+        <Button size="sm" variant="secondary" icon={<RotateCcw className="size-4" />} onClick={() => void act("reopen", { action: "reopen" }, "Orden reabierta")}>
+          Reabrir
+        </Button>
+      )}
+      {(s === "cancelada" || data.me.scope === "total") && (
+        <Button
+          size="sm"
+          variant="danger"
+          icon={<Trash2 className="size-4" />}
+          onClick={async () => {
+            const body =
+              s === "cancelada"
+                ? "Se borra la orden cancelada. Esta acción no se puede deshacer."
+                : "Se borra la orden y sus tareas. Si está entregada, sus ventas dejan de contar en Ganancias. Esta acción no se puede deshacer.";
+            if (await confirm({ title: `¿Eliminar ${order.folio}?`, body, confirmLabel: "Eliminar", danger: true })) {
+              const ok = await run("delete", () => api.orders.remove(order.id), "Orden eliminada");
+              if (ok) onClose();
+            }
+          }}
+        >
+          Eliminar
+        </Button>
       )}
     </div>
   );
