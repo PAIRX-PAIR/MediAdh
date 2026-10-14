@@ -28,6 +28,10 @@ interface FinanceReport {
   profit: number;
   orders: Array<{ id: string; folio: string; clientName: string; title: string; deliveredOn: string; price: number; supplies: number; invoiced: boolean }>;
   withoutPrice: number;
+  pendingSales: number;
+  pendingCount: number;
+  projected: boolean;
+  q2Projected: boolean;
   missingSalaries: string[];
   payroll: Array<{
     userId: string;
@@ -101,10 +105,20 @@ export function FinanceScreen() {
       />
 
       <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="Ventas del mes" value={formatCop(report.sales)} hint={`${report.orders.length} trabajo(s) entregado(s)`} tone="glow" />
+        <StatTile
+          label="Ventas del mes"
+          value={formatCop(report.sales)}
+          hint={`${report.orders.length} entregado(s)${report.pendingCount ? ` · ${formatCop(report.pendingSales)} por entregar` : ""}`}
+          tone="glow"
+        />
         <StatTile label="Insumos" value={formatCop(report.supplies)} />
         <StatTile label="Nómina (2 quincenas)" value={formatCop(payroll)} hint={report.employerCostPct > 0 ? `incluye carga prestacional ${report.employerCostPct} %` : "sin carga prestacional"} />
-        <StatTile label="Ganancia" value={formatCop(report.profit)} tone={report.profit >= 0 ? "done" : "blocked"} />
+        <StatTile
+          label={report.projected ? "Ganancia (proyectada)" : "Ganancia"}
+          value={formatCop(report.profit)}
+          hint={report.projected ? "el mes aún no termina" : undefined}
+          tone={report.profit >= 0 ? "done" : "blocked"}
+        />
       </div>
 
       {(report.withoutPrice > 0 || report.missingSalaries.length > 0) && (
@@ -127,13 +141,21 @@ export function FinanceScreen() {
       <Panel>
         <h2 className="mb-3 font-display text-lg font-semibold text-ink">Del ingreso a la ganancia</h2>
         <dl className="tabular flex max-w-xl flex-col gap-1.5 text-sm">
-          <Row label="Ventas del mes" value={formatCop(report.sales)} strong />
+          <Row label="Ventas del mes (trabajos entregados)" value={formatCop(report.sales)} strong />
+          {report.pendingCount > 0 && (
+            <p className="-mt-1 text-xs text-muted">
+              Por entregar este mes: {formatCop(report.pendingSales)} en {report.pendingCount} orden(es). Suman cuando se marquen como entregadas.
+            </p>
+          )}
           <Row label="− Insumos de esos trabajos" value={`− ${formatCop(report.supplies)}`} />
           <Row label={`− Quincena 1 (${formatDate(q1.from, { day: "numeric" })}–${formatDate(q1.to, { day: "numeric", month: "short" })})`} value={`− ${formatCop(report.payrollQ1)}`} />
-          <Row label={`− Quincena 2 (${formatDate(q2.from, { day: "numeric" })}–${formatDate(q2.to, { day: "numeric", month: "short" })})`} value={`− ${formatCop(report.payrollQ2)}`} />
+          <Row
+            label={`− Quincena 2 (${formatDate(q2.from, { day: "numeric" })}–${formatDate(q2.to, { day: "numeric", month: "short" })})${report.q2Projected ? " · proyectada" : ""}`}
+            value={`− ${formatCop(report.payrollQ2)}`}
+          />
           <Row label={`− Carga prestacional (${report.employerCostPct} %)`} value={`− ${formatCop(report.employerCost)}`} />
           <div className="mt-1 flex items-baseline justify-between border-t border-line pt-2">
-            <dt className="font-display font-semibold text-ink">Queda para el taller</dt>
+            <dt className="font-display font-semibold text-ink">{report.projected ? "Queda al cierre del mes (proyectado)" : "Queda para el taller"}</dt>
             <dd className={cn("font-display text-2xl font-bold", report.profit >= 0 ? "text-done" : "text-blocked")}>{formatCop(report.profit)}</dd>
           </div>
         </dl>

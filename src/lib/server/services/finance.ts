@@ -32,6 +32,11 @@ export async function financeReport(principal: Principal, monthParam: string | n
     }))
     .sort((a, b) => a.deliveredOn.localeCompare(b.deliveredOn));
   const sales = delivered.reduce((s, o) => s + o.price, 0);
+  // Open jobs with a price due this month: what is still to come in sales.
+  const pending = docs.orders.items.filter(
+    (o) => ["recibida", "en_proceso", "terminada", "garantia"].includes(o.status) && !o.deliveredAt && o.due?.date.startsWith(month),
+  );
+  const pendingSales = pending.reduce((s, o) => s + (o.finalPrice ?? o.price ?? 0), 0);
   const supplies = delivered.reduce((s, o) => s + o.supplies, 0);
   const withoutPrice = delivered.filter((o) => o.price === 0).length;
 
@@ -85,6 +90,11 @@ export async function financeReport(principal: Principal, monthParam: string | n
     profit,
     orders: delivered,
     withoutPrice,
+    pendingSales,
+    pendingCount: pending.length,
+    /** The month is not over: the second quincena and the profit are projections. */
+    projected: principal.today < q2.to,
+    q2Projected: principal.today < q2.from,
     missingSalaries: payroll.filter((p) => p.monthlySalary === null).map((p) => p.name),
     payroll,
     goals: { ...goals, value: basisValue, progress: goalProgress(basisValue, goals.goals) },
