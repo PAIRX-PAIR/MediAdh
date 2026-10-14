@@ -648,6 +648,24 @@ export const financeSettingsSchema = z.object({
 });
 export type FinanceSettings = z.infer<typeof financeSettingsSchema>;
 
+/**
+ * Bonificación o descuento puntual de una persona en una quincena (anticipo,
+ * préstamo, bono…). Bonuses are paid on top (not part of the social-security
+ * base); deductions come off the net pay.
+ */
+export const payAdjustmentSchema = z.object({
+  id,
+  userId: z.string(),
+  /** "AAAA-MM-1" o "AAAA-MM-2". */
+  quincena: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])-[12]$/),
+  kind: z.enum(["bono", "descuento"]),
+  concept: z.string(),
+  amount: z.number().min(0),
+  createdBy: z.string(),
+  createdAt: isoDateTime,
+});
+export type PayAdjustment = z.infer<typeof payAdjustmentSchema>;
+
 /** One clock-in/clock-out block of a person (registro de horas). */
 export const attendanceSchema = z.object({
   id,
@@ -757,6 +775,7 @@ export const COLLECTIONS = {
   ipc: collectionSchema(ipcEntrySchema),
   attendance: collectionSchema(attendanceSchema),
   devices: collectionSchema(deviceSchema),
+  payAdjustments: collectionSchema(payAdjustmentSchema),
 } as const;
 
 export type CollectionName = keyof typeof COLLECTIONS;
@@ -780,6 +799,7 @@ export interface Database {
   ipc: Collection<IpcEntry>;
   attendance: Collection<Attendance>;
   devices: Collection<Device>;
+  payAdjustments: Collection<PayAdjustment>;
 }
 
 export type DocName = keyof Database;
@@ -816,6 +836,7 @@ export const DOC_LAYOUT: Record<DocName, DocLayout> = {
   ipc: { kind: "single" },
   attendance: { kind: "sharded", dir: "asistencia" },
   devices: { kind: "single" },
+  payAdjustments: { kind: "single" },
 };
 
 export const DOC_NAMES = Object.keys(DOC_LAYOUT) as DocName[];

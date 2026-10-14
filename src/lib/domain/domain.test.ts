@@ -123,6 +123,25 @@ describe("nómina quincenal", () => {
     expect(paidDaysIn(quincenaOf("2026-02-20"), [["2026-01-01", null]])).toBe(15); // febrero completo
   });
 
+  it("suma bonificaciones y resta descuentos de la quincena", () => {
+    const base = { userId: "u1", quincena: "2026-10-1", createdBy: "x", createdAt: "2026-10-05T12:00:00.000Z" };
+    const [line] = liquidate({
+      people: [{ id: "u1", displayName: "Operario", monthlySalary: 2_100_000, transportAllowance: false }],
+      entries: [],
+      quincena: quincenaOf("2026-10-13"),
+      calendar: smi,
+      settings,
+      adjustments: [
+        { ...base, id: "b", kind: "bono", concept: "Meta", amount: 100_000 },
+        { ...base, id: "d", kind: "descuento", concept: "Anticipo", amount: 300_000 },
+        { ...base, id: "x", quincena: "2026-10-2", kind: "descuento", concept: "Otra quincena", amount: 999 },
+      ],
+    });
+    // Salud y pensión sobre el básico (1.050.000): 84.000; el bono no entra en esa base.
+    expect(line).toMatchObject({ bonuses: 100_000, otherDeductions: 300_000, earned: 1_150_000, health: 42_000, pension: 42_000, net: 766_000 });
+    expect(line!.adjustments.map((a) => a.concept)).toEqual(["Meta", "Anticipo"]);
+  });
+
   it("liquida básico, extras, auxilio y descuentos de ley", () => {
     const [line] = liquidate({
       people: [{ id: "u1", displayName: "Operario", monthlySalary: 2_100_000, transportAllowance: true }],

@@ -1,8 +1,9 @@
 "use client";
 
-import { BadgeCheck, CalendarRange, Edit3, KeyRound, Lock, LockOpen, Plus, Power, ShieldCheck, Trash2, UserCheck, UserPlus, UserX } from "lucide-react";
+import { BadgeCheck, CalendarRange, Edit3, KeyRound, Lock, LockOpen, Plus, Power, ShieldCheck, Trash2, UserCheck, UserPlus, UserX, Wallet } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { PayEditorModal } from "@/components/production/pay-editor";
 import { useSync } from "@/components/providers/sync-provider";
 import { PageHeader, Segmented } from "@/components/ui/kit";
 import { Modal, useConfirm } from "@/components/ui/overlay";
@@ -11,6 +12,7 @@ import { api } from "@/lib/client/api";
 import { useAction } from "@/lib/client/use-action";
 import { AREAS } from "@/lib/domain/defaults";
 import { CONTRACT_STATUS_LABEL, USER_STATUS_LABEL, formatDate, formatDateTime, timeAgo } from "@/lib/domain/labels";
+import { formatCop } from "@/lib/domain/quote";
 import { addDays } from "@/lib/domain/time";
 import type { PositionView, UserView } from "@/lib/domain/views";
 
@@ -35,8 +37,18 @@ export function TeamScreen() {
     | { kind: "position"; position: PositionView | null }
     | { kind: "account" }
     | { kind: "reset"; user: UserView }
+    | { kind: "pay"; user: UserView }
   >(null);
   const { run, busy } = useAction();
+  // Salaries never travel in the sync payload: Equipo (gerencia/administración only) asks for them.
+  const [salaries, setSalaries] = useState<Map<string, number | null>>(new Map());
+  const [salaryVersion, setSalaryVersion] = useState(0);
+  useEffect(() => {
+    api.payroll
+      .report()
+      .then((r) => setSalaries(new Map(r.people.map((p) => [p.id, p.monthlySalary]))))
+      .catch(() => undefined);
+  }, [salaryVersion]);
   const { confirm, dialog } = useConfirm();
 
   const setTab = (t: Tab) => {
@@ -192,6 +204,7 @@ export function TeamScreen() {
                 <th className="px-4 py-3 font-semibold">Persona</th>
                 <th className="px-2 py-3 font-semibold">Tipo / puesto</th>
                 <th className="px-2 py-3 font-semibold">Estado</th>
+                <th className="px-2 py-3 text-right font-semibold">Sueldo</th>
                 <th className="px-2 py-3 font-semibold">Último ingreso</th>
                 <th className="px-2 py-3 font-semibold">Avisos</th>
                 <th className="px-4 py-3 text-right font-semibold">Acciones</th>
@@ -218,49 +231,55 @@ export function TeamScreen() {
                           {u.mustChangePassword && <Chip tone="pending">Clave temporal</Chip>}
                         </span>
                       </td>
+                      <td className="tabular px-2 py-2.5 text-right text-ink-soft">{salaries.get(u.id) ? formatCop(salaries.get(u.id)!) : "—"}</td>
                       <td className="px-2 py-2.5 text-xs text-muted">{u.lastLoginAt ? timeAgo(u.lastLoginAt) : "Nunca"}</td>
                       <td className="tabular px-2 py-2.5 text-xs text-muted">{u.pushDevices} disp.</td>
                       <td className="px-4 py-2.5">
-                        {!me && (
-                          <span className="flex justify-end gap-1">
-                            {u.lockedUntil && (
-                              <IconAction label="Desbloquear" onClick={() => void run(`unlock-${u.id}`, () => api.admin.updateUser(u.id, { unlock: true }), "Cuenta desbloqueada")}>
-                                <LockOpen className="size-4" />
+                        <span className="flex justify-end gap-1">
+                          <IconAction label="Pagos (sueldo, auxilio, bonos y descuentos)" onClick={() => setModal({ kind: "pay", user: u })}>
+                            <Wallet className="size-4" />
+                          </IconAction>
+                          {!me && (
+                            <>
+                              {u.lockedUntil && (
+                                <IconAction label="Desbloquear" onClick={() => void run(`unlock-${u.id}`, () => api.admin.updateUser(u.id, { unlock: true }), "Cuenta desbloqueada")}>
+                                  <LockOpen className="size-4" />
+                                </IconAction>
+                              )}
+                              <IconAction label="Restablecer contraseña" onClick={() => setModal({ kind: "reset", user: u })}>
+                                <KeyRound className="size-4" />
                               </IconAction>
-                            )}
-                            <IconAction label="Restablecer contraseña" onClick={() => setModal({ kind: "reset", user: u })}>
-                              <KeyRound className="size-4" />
-                            </IconAction>
-                            {u.status === "active" ? (
+                              {u.status === "active" ? (
+                                <IconAction
+                                  label="Desactivar"
+                                  onClick={async () => {
+                                    if (await confirm({ title: `¿Desactivar a ${u.displayName}?`, body: "Pierde el acceso de inmediato en todos sus dispositivos.", confirmLabel: "Desactivar", danger: true })) {
+                                      void run(`dis-${u.id}`, () => api.admin.updateUser(u.id, { status: "disabled" }), "Cuenta desactivada");
+                                    }
+                                  }}
+                                >
+                                  <Lock className="size-4" />
+                                </IconAction>
+                              ) : (
+                                u.status === "disabled" && (
+                                  <IconAction label="Activar" onClick={() => void run(`act-${u.id}`, () => api.admin.updateUser(u.id, { status: "active" }), "Cuenta activada")}>
+                                    <Power className="size-4" />
+                                  </IconAction>
+                                )
+                              )}
                               <IconAction
-                                label="Desactivar"
+                                label="Eliminar cuenta"
                                 onClick={async () => {
-                                  if (await confirm({ title: `¿Desactivar a ${u.displayName}?`, body: "Pierde el acceso de inmediato en todos sus dispositivos.", confirmLabel: "Desactivar", danger: true })) {
-                                    void run(`dis-${u.id}`, () => api.admin.updateUser(u.id, { status: "disabled" }), "Cuenta desactivada");
+                                  if (await confirm({ title: `¿Eliminar la cuenta de ${u.displayName}?`, body: "Se borran sus datos de acceso. El histórico de trabajo se conserva.", confirmLabel: "Eliminar", danger: true })) {
+                                    void run(`del-${u.id}`, () => api.admin.deleteUser(u.id), "Cuenta eliminada");
                                   }
                                 }}
                               >
-                                <Lock className="size-4" />
+                                <Trash2 className="size-4" />
                               </IconAction>
-                            ) : (
-                              u.status === "disabled" && (
-                                <IconAction label="Activar" onClick={() => void run(`act-${u.id}`, () => api.admin.updateUser(u.id, { status: "active" }), "Cuenta activada")}>
-                                  <Power className="size-4" />
-                                </IconAction>
-                              )
-                            )}
-                            <IconAction
-                              label="Eliminar cuenta"
-                              onClick={async () => {
-                                if (await confirm({ title: `¿Eliminar la cuenta de ${u.displayName}?`, body: "Se borran sus datos de acceso. El histórico de trabajo se conserva.", confirmLabel: "Eliminar", danger: true })) {
-                                  void run(`del-${u.id}`, () => api.admin.deleteUser(u.id), "Cuenta eliminada");
-                                }
-                              }}
-                            >
-                              <Trash2 className="size-4" />
-                            </IconAction>
-                          </span>
-                        )}
+                            </>
+                          )}
+                        </span>
                       </td>
                     </tr>
                   );
@@ -289,6 +308,9 @@ export function TeamScreen() {
       {modal?.kind === "position" && <PositionModal position={modal.position} onClose={() => setModal(null)} />}
       {modal?.kind === "account" && <AccountModal onClose={() => setModal(null)} />}
       {modal?.kind === "reset" && <ResetModal user={modal.user} onClose={() => setModal(null)} />}
+      {modal?.kind === "pay" && (
+        <PayEditorModal userId={modal.user.id} name={modal.user.displayName} onClose={() => setModal(null)} onSaved={() => setSalaryVersion((v) => v + 1)} />
+      )}
       {dialog}
     </div>
   );

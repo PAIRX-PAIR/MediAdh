@@ -15,7 +15,7 @@ import { payrollPeopleFor } from "./payroll";
 export async function financeReport(principal: Principal, monthParam: string | null) {
   const month = monthParam ?? principal.today.slice(0, 7);
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw badRequest("Mes inválido (AAAA-MM).");
-  const docs = await getDb().read(["orders", "attendance", "settings", "users", "positions"]);
+  const docs = await getDb().read(["orders", "attendance", "settings", "users", "positions", "payAdjustments"]);
   const tz = docs.settings.timezone;
 
   const delivered = docs.orders.items
@@ -40,14 +40,15 @@ export async function financeReport(principal: Principal, monthParam: string | n
   const q2 = quincenaByKey(`${month}-2`)!;
   const entries = docs.attendance.items.filter((e) => e.date >= q1.from && e.date <= q2.to);
   const people = payrollPeopleFor(docs, entries, principal.today);
-  const lines1 = liquidate({ people, entries, quincena: q1, calendar, settings: docs.settings.payroll });
-  const lines2 = liquidate({ people, entries, quincena: q2, calendar, settings: docs.settings.payroll });
+  const adjustments = docs.payAdjustments.items;
+  const lines1 = liquidate({ people, entries, quincena: q1, calendar, settings: docs.settings.payroll, adjustments });
+  const lines2 = liquidate({ people, entries, quincena: q2, calendar, settings: docs.settings.payroll, adjustments });
   const employerPct = docs.settings.finance.employerCostPct / 100;
   const payroll = people.map((p, i) => {
     const a = lines1[i]!;
     const b = lines2[i]!;
-    // Employer contributions and benefits apply to salary + overtime, not to the transport allowance.
-    const employer = Math.round((a.earned - a.transport + b.earned - b.transport) * employerPct);
+    // Employer contributions and benefits apply to salary + overtime (not transport allowance or bonuses).
+    const employer = Math.round((a.basic + a.extrasTotal + b.basic + b.extrasTotal) * employerPct);
     return {
       userId: p.id,
       name: p.displayName,
