@@ -23,6 +23,14 @@ test.describe("operario en el celular", () => {
     expect((await page.request.get("/api/tablero/no-existe")).status()).toBe(404);
   });
 
+  test("el operario pide material desde la barra de abajo", async ({ page }) => {
+    await page.goto("/operario");
+    await page.getByRole("button", { name: "Pedir acceso" }).click();
+    await expect(page.getByRole("img", { name: /Código QR/ })).toBeVisible();
+    // Sin autorizar no hay barra de pedidos (solo aparece en la cola del operario).
+    await expect(page.getByRole("button", { name: "Pedir material" })).toHaveCount(0);
+  });
+
   test("los operarios no inician sesión", async ({ page }) => {
     await signIn(page, WORKER);
     await expect(page.getByRole("dialog").getByRole("alert")).toContainText("tablero del taller");

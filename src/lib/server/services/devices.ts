@@ -10,6 +10,8 @@ import { HttpError, badRequest, notFound } from "../http";
 import { getDb } from "../store";
 import { actorOf, audit, newId, nowIso } from "./common";
 import { boardForOperator, type Board } from "./board";
+import { createRequest } from "./work";
+import type { RequestInput } from "./work";
 
 /**
  * Acceso de operarios por QR. The phone asks for access and shows a short code
@@ -205,4 +207,30 @@ export async function revokeDevice(principal: Principal, id: string) {
     device.revokedAt = nowIso();
     audit(log, actorOf(principal), "celular_revocado", device.userId, device.label);
   });
+}
+
+/**
+ * Pedido de material desde el celular autorizado: se registra a nombre de la
+ * persona del celular y aparece en Pedidos, igual que los que hace en la app.
+ */
+export async function deviceRequest(input: RequestInput) {
+  const { device, state } = await resolveDevice();
+  if (state.status !== "aprobado" || !device?.userId) throw new HttpError(403, "Este celular no tiene acceso. Pide acceso de nuevo.", "device_not_approved");
+  const { users, positions, settings } = await getDb().read(["users", "positions", "settings"]);
+  const user = users.items.find((u) => u.id === device.userId);
+  if (!user) throw notFound();
+  const today = todayIn(settings.timezone);
+  const position = positions.items.find((p) => activeHolderId(p, today) === user.id) ?? null;
+  // Minimal principal for the shared request service: the phone acts as its operator, nothing else.
+  const principal = {
+    user,
+    position,
+    isAdmin: false,
+    scope: null,
+    settings,
+    today,
+    claims: { sub: user.id, sv: user.sessionVersion, iat: 0, exp: 0 },
+    incomplete: false,
+  } as unknown as Principal;
+  return createRequest(principal, input);
 }
