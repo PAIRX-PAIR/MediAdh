@@ -150,3 +150,35 @@ describe("acceso de operarios por QR", () => {
     await expect(devices.approveDevice(boss, pending.code, "admin-1")).rejects.toMatchObject({ status: 410 });
   });
 });
+
+describe("pedir material desde el celular del operario", () => {
+  it("un celular autorizado crea el pedido a nombre de su operario", async () => {
+    const boss = await admin();
+    const team = await import("./team");
+    await team.createAccount(boss, {
+      displayName: "Operario Torno",
+      username: "",
+      tempPassword: "",
+      phone: null,
+      kind: "staff",
+      positionId: "tornero-1",
+      replaceCurrent: false,
+      startDate: boss.today,
+      endDate: null,
+      notes: null,
+    });
+    const pending = (await devices.requestDevice(null)) as { code: string };
+    const { users } = await db.read(["users"]);
+    const operator = users.items.find((u) => u.displayName === "Operario Torno")!;
+    await devices.approveDevice(boss, pending.code, operator.id);
+
+    const { request } = await devices.deviceRequest({ type: "herramienta", item: "Inserto CCMT 09", quantity: "4", urgent: true, note: null, taskId: null });
+    expect(request).toMatchObject({ requesterName: "Operario Torno", userId: operator.id, item: "Inserto CCMT 09", status: "pendiente", urgent: true });
+    const { requests } = await db.read(["requests"]);
+    expect(requests.items).toHaveLength(1);
+  });
+
+  it("sin celular autorizado no se puede pedir nada", async () => {
+    await expect(devices.deviceRequest({ type: "material", item: "Tornillos", quantity: null, urgent: false, note: null, taskId: null })).rejects.toMatchObject({ status: 403 });
+  });
+});

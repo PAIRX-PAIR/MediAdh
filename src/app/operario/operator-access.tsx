@@ -8,6 +8,7 @@ import { BrandMark } from "@/components/shell/brand-mark";
 import { Button, Spinner } from "@/components/ui/primitives";
 import { formatDeviceCode as pretty } from "@/lib/domain/device-code";
 import { BoardScreen } from "../tablero/[token]/board-screen";
+import { RequestMaterialBar } from "./request-material";
 
 type State =
   | { status: "cargando" }
@@ -76,6 +77,7 @@ export function OperatorAccess() {
 
   if (state.status === "aprobado") {
     return (
+      <>
       <BoardScreen
         source="/api/dispositivo/tablero"
         title={`Mi trabajo · ${state.operator}`}
@@ -94,6 +96,9 @@ export function OperatorAccess() {
           </Button>
         }
       />
+      <div className="h-24" aria-hidden />
+      <RequestMaterialBar />
+      </>
     );
   }
 
