@@ -95,7 +95,7 @@ test.describe("consola del coordinador", () => {
 
   test("los títulos de pestaña son los de cada pantalla", async ({ page }) => {
     for (const [path, title] of [
-      ["/admin/solicitudes", "Pedidos de material"],
+      ["/admin/solicitudes", "Pedidos de material, insumos, consumibles"],
       ["/admin/cierres", "Cierres de día"],
       ["/admin/avisos", "Avisos del taller"],
       ["/admin/auditoria", "Auditoría"],
