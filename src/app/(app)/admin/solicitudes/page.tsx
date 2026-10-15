@@ -35,7 +35,7 @@ function AdminRequests() {
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader eyebrow="Equipo" title="Pedidos de material" description="Lo que piden los puestos. Al responder, la persona recibe el aviso en su celular." />
+      <PageHeader eyebrow="Equipo" title="Pedidos de material, insumos, consumibles" description="Lo que piden los puestos. Al responder, la persona recibe el aviso en su celular." />
       <Segmented
         label="Vista"
         value={view}
