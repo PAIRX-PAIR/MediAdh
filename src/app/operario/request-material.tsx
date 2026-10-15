@@ -1,6 +1,7 @@
 "use client";
 
-import { PackagePlus } from "lucide-react";
+import { ClipboardCheck, PackagePlus } from "lucide-react";
+import { ShiftCheckin } from "./shift-checkin";
 import { useState } from "react";
 import { Modal } from "@/components/ui/overlay";
 import { Button, Field, Input, Select, Textarea } from "@/components/ui/primitives";
@@ -11,15 +12,20 @@ import { REQUEST_TYPES, type RequestType } from "@/lib/domain/schema";
 /** Barra de abajo del celular del operario: pedir material, herramienta o EPP sin iniciar sesión. */
 export function RequestMaterialBar() {
   const [open, setOpen] = useState(false);
+  const [checkin, setCheckin] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   return (
     <>
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-night/95 p-3 backdrop-blur safe-bottom">
+      <div className="fixed inset-x-0 bottom-0 z-30 flex gap-2 border-t border-line bg-night/95 p-3 backdrop-blur safe-bottom">
+        <Button variant="secondary" size="lg" className="shrink-0" icon={<ClipboardCheck className="size-5" />} onClick={() => setCheckin(true)} aria-label="Avance del turno">
+          Avance
+        </Button>
         <Button size="lg" block icon={<PackagePlus className="size-5" />} onClick={() => setOpen(true)}>
           Pedir material
         </Button>
         {done && <p className="mt-2 text-center text-xs text-done">{done}</p>}
       </div>
+      <ShiftCheckin open={checkin} onClose={() => setCheckin(false)} />
       {open && <RequestForm onClose={() => setOpen(false)} onSent={(folio) => setDone(`Pedido ${folio} enviado al coordinador.`)} />}
     </>
   );

@@ -3,14 +3,17 @@ import { createHash, randomBytes, randomInt } from "node:crypto";
 import { cookies } from "next/headers";
 import { activeHolderId } from "@/lib/domain/contracts";
 import type { Device } from "@/lib/domain/schema";
-import { todayIn } from "@/lib/domain/time";
+import { todayIn, zonedInstant } from "@/lib/domain/time";
 import type { Principal } from "../auth/principal";
 import { isProduction } from "../env";
 import { HttpError, badRequest, notFound } from "../http";
 import { getDb } from "../store";
 import { actorOf, audit, newId, nowIso } from "./common";
 import { boardForOperator, type Board } from "./board";
-import { createRequest } from "./work";
+import { createRequest, updateTask } from "./work";
+import { shiftsOn } from "@/lib/domain/calendar";
+import type { WeekSchedule } from "@/lib/domain/calendar";
+
 import type { RequestInput } from "./work";
 
 /**
@@ -233,4 +236,85 @@ export async function deviceRequest(input: RequestInput) {
     incomplete: false,
   } as unknown as Principal;
   return createRequest(principal, input);
+}
+
+/** Principal of the operator behind this phone (for the shared task and request services). */
+async function devicePrincipal(): Promise<{ principal: Principal; device: Device; today: string; timezone: string } | null> {
+  const { device, state } = await resolveDevice();
+  if (state.status !== "aprobado" || !device?.userId) return null;
+  const { users, positions, settings } = await getDb().read(["users", "positions", "settings"]);
+  const user = users.items.find((u) => u.id === device.userId);
+  if (!user) return null;
+  const today = todayIn(settings.timezone);
+  const position = positions.items.find((p) => activeHolderId(p, today) === user.id) ?? null;
+  const principal = {
+    user,
+    position,
+    isAdmin: false,
+    scope: null,
+    settings,
+    today,
+    claims: { sub: user.id, sv: user.sessionVersion, iat: 0, exp: 0 },
+    incomplete: false,
+  } as unknown as Principal;
+  return { principal, device, today, timezone: settings.timezone };
+}
+
+/** Minutes until the last shift of today ends (null when no shift is left today). */
+function minutesToShiftEnd(today: string, timezone: string, calendar: { schedule: WeekSchedule; skipHolidays: boolean }, now: number): number | null {
+  const shifts = shiftsOn(today, calendar);
+  if (shifts.length === 0) return null;
+  const end = zonedInstant(today, shifts[shifts.length - 1]!.end, timezone).getTime();
+  return end > now ? Math.ceil((end - now) / 60_000) : null;
+}
+
+/** Open tasks of this operator's position, for the end-of-shift check-in. */
+export async function deviceTasks() {
+  const ctx = await devicePrincipal();
+  if (!ctx) throw new HttpError(403, "Este celular no tiene acceso. Pide acceso de nuevo.", "device_not_approved");
+  const { tasks, settings } = await getDb().read(["tasks", "settings"]);
+  const calendar = { schedule: settings.production.schedule, skipHolidays: settings.production.skipHolidays };
+  const mine = tasks.items
+    .filter((t) => t.positionId === ctx.principal.position?.id && t.status !== "completada")
+    .sort((a, b) => a.folio.localeCompare(b.folio));
+  return {
+    date: ctx.today,
+    minutesToEnd: minutesToShiftEnd(ctx.today, ctx.timezone, calendar, Date.now()),
+    tasks: mine.map((t) => ({
+      id: t.id,
+      folio: t.folio,
+      title: t.title,
+      piece: t.piece,
+      quantity: t.quantity,
+      quantityDone: t.quantityDone,
+      status: t.status,
+      actualHours: t.actualHours,
+      plannedHours: t.plannedHours,
+      blockedReason: t.blockedReason,
+    })),
+  };
+}
+
+export interface ProgressUpdate {
+  taskId: string;
+  status: "completada" | "en_proceso" | "bloqueada" | "pendiente";
+  quantityDone?: number;
+  actualHours?: number | null;
+  blockedReason?: string | null;
+}
+
+/** Saves the operator's end-of-shift answers through the same rules as the app (tareas). */
+export async function deviceReportProgress(updates: ProgressUpdate[]) {
+  const ctx = await devicePrincipal();
+  if (!ctx) throw new HttpError(403, "Este celular no tiene acceso. Pide acceso de nuevo.", "device_not_approved");
+  let saved = 0;
+  for (const u of updates) {
+    const patch: Parameters<typeof updateTask>[2] = { status: u.status };
+    if (u.quantityDone !== undefined) patch.quantityDone = u.quantityDone;
+    if (u.actualHours !== undefined) patch.actualHours = u.actualHours;
+    if (u.status === "bloqueada") patch.blockedReason = u.blockedReason ?? null;
+    await updateTask(ctx.principal, u.taskId, patch);
+    saved += 1;
+  }
+  return { saved };
 }

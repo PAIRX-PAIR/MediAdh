@@ -182,3 +182,44 @@ describe("pedir material desde el celular del operario", () => {
     await expect(devices.deviceRequest({ type: "material", item: "Tornillos", quantity: null, urgent: false, note: null, taskId: null })).rejects.toMatchObject({ status: 403 });
   });
 });
+
+describe("avance de fin de turno desde el celular", () => {
+  it("guarda piezas y horas parciales, y el bloqueo exige motivo", async () => {
+    const boss = await admin();
+    const team = await import("./team");
+    await team.createAccount(boss, {
+      displayName: "Operario Fresa",
+      username: "",
+      tempPassword: "",
+      phone: null,
+      kind: "staff",
+      positionId: "fresadora",
+      replaceCurrent: false,
+      startDate: boss.today,
+      endDate: null,
+      notes: null,
+    });
+    const pending = (await devices.requestDevice(null)) as { code: string };
+    const { users } = await db.read(["users"]);
+    const operator = users.items.find((u) => u.displayName === "Operario Fresa")!;
+    await devices.approveDevice(boss, pending.code, operator.id);
+    await db.transact(["tasks"], "tarea de prueba", ({ tasks }) => {
+      tasks.items.push({
+        id: "t-prueba", folio: "T-9001", title: "Cuchillas", description: "", positionId: "fresadora", priority: "normal", status: "pendiente",
+        dueDate: null, piece: "Platina D2", quantity: 8, quantityDone: 0, checklist: [], notes: [], blockedReason: null,
+        createdBy: "x", createdAt: "2026-10-13T12:00:00.000Z", updatedAt: "2026-10-13T12:00:00.000Z", updatedBy: "x", startedAt: null,
+        completedAt: null, completedBy: null, orderId: null, workItemId: null, machineId: null, plannedHours: 6, actualHours: null, history: [],
+      });
+    });
+
+    const board = await devices.deviceTasks();
+    expect(board.tasks.map((t) => t.folio)).toEqual(["T-9001"]);
+
+    await devices.deviceReportProgress([{ taskId: "t-prueba", status: "en_proceso", quantityDone: 3, actualHours: 2.5 }]);
+    const after = (await db.read(["tasks"])).tasks.items.find((t) => t.id === "t-prueba")!;
+    expect(after).toMatchObject({ status: "en_proceso", quantityDone: 3, actualHours: 2.5 });
+
+    await expect(devices.deviceReportProgress([{ taskId: "t-prueba", status: "bloqueada" }])).rejects.toMatchObject({ status: 400 });
+    await expect(devices.deviceReportProgress([{ taskId: "otra", status: "completada" }])).rejects.toMatchObject({ status: 404 });
+  });
+});

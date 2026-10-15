@@ -290,3 +290,18 @@ export const payAdjustmentInput = z.object({
   concept: requiredText(80),
   amount: money,
 });
+
+export const deviceProgressInput = z.object({
+  updates: z
+    .array(
+      z.object({
+        taskId: entityId,
+        status: z.enum(["completada", "en_proceso", "bloqueada", "pendiente"]),
+        quantityDone: z.number().int().min(0).max(100000).optional(),
+        actualHours: z.union([z.number().min(0).max(2000), z.null()]).optional(),
+        blockedReason: optionalText(300),
+      }),
+    )
+    .min(1)
+    .max(40),
+});
