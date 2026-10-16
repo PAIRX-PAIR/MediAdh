@@ -56,6 +56,11 @@ export interface PayrollReport {
   people: PayrollPersonView[];
   lines: PayrollLine[];
   entries: Array<Omit<Attendance, "history">>;
+  /** AAAA-MM of the quincena, and hours of each person since the 1st of that month (up to now). */
+  month: string;
+  monthHours: Record<string, { worked: number; extra: number }>;
+  /** The schedule hours add up by themselves each workday. */
+  autoAttendance: boolean;
 }
 
 export class ApiError extends Error {
@@ -458,7 +463,7 @@ export const api = {
   attendance: {
     mine: () => request<MyAttendance>("/api/asistencia"),
     clock: (action: "in" | "out") => request<{ entry: Attendance }>("/api/asistencia", { method: "POST", body: { action } }),
-    create: (input: { userId: string; date: string; start: string; end: string | null; note?: string }) =>
+    create: (input: { userId: string; date: string; start: string; end: string | null; note?: string; absent?: boolean }) =>
       request<{ entry: Attendance }>("/api/admin/asistencia", { method: "POST", body: input }),
     update: (id: string, patch: { date?: string; start?: string; end?: string | null; note?: string }) =>
       request<{ entry: Attendance }>(`/api/admin/asistencia/${encodeURIComponent(id)}`, { method: "PATCH", body: patch }),

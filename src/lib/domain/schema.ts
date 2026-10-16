@@ -622,6 +622,8 @@ export const payrollSettingsSchema = z.object({
   pensionPct: z.number().min(0).max(100).default(4),
   /** Monthly auxilio de transporte (COP) for those who have it; 0 until the admin sets it. */
   transportAllowance: z.number().min(0).default(0),
+  /** Each workday adds the schedule hours by itself (no clock-in needed); records and faltas replace it. */
+  autoAttendance: z.boolean().default(true),
 });
 export type PayrollSettings = z.infer<typeof payrollSettingsSchema>;
 
@@ -676,8 +678,10 @@ export const attendanceSchema = z.object({
   /** null while the person is still clocked in. */
   end: hhmm.nullable().default(null),
   note: z.string().default(""),
-  /** operario = marked from the phone; admin = entered or corrected by an admin. */
-  source: z.enum(["operario", "admin"]),
+  /** Falta: the day counts 0 hours (and stops the automatic schedule hours for that day). */
+  absent: z.boolean().default(false),
+  /** operario = marked from the phone; admin = entered or corrected by an admin; auto = schedule hours (never stored). */
+  source: z.enum(["operario", "admin", "auto"]),
   createdBy: z.string(),
   createdAt: isoDateTime,
   updatedAt: isoDateTime,

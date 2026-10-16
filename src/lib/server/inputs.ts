@@ -228,6 +228,7 @@ const payrollSettingsPatch = z
     healthPct: z.number().min(0).max(100),
     pensionPct: z.number().min(0).max(100),
     transportAllowance: money,
+    autoAttendance: z.boolean(),
   })
   .partial();
 
@@ -265,6 +266,7 @@ export const attendanceInput = z.object({
   start: hhmm,
   end: z.union([hhmm, z.null()]).default(null),
   note: text(200).default(""),
+  absent: z.boolean().default(false),
 });
 
 export const attendancePatchInput = z

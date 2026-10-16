@@ -71,6 +71,9 @@ test.describe("consola del coordinador", () => {
   test("la nómina liquida la quincena con horas extra y el horario tiene 42 h", async ({ page }) => {
     await page.goto("/admin/nomina");
     await expect(page.getByText("Neto a pagar").first()).toBeVisible();
+    await expect(page.getByText("Acumulado del mes").first()).toBeVisible();
+    // The previous quincena is always complete in the demo (the current one may have just started).
+    await page.getByRole("button", { name: "Quincena anterior" }).click();
     await page.getByRole("button", { name: "Horas y sueldo" }).first().click();
     const detail = page.getByRole("dialog");
     await expect(detail.getByText(/Básico \(\d+ días\)/)).toBeVisible();

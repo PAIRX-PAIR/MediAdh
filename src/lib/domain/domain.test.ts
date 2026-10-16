@@ -77,6 +77,7 @@ describe("nómina quincenal", () => {
     healthPct: 4,
     pensionPct: 4,
     transportAllowance: 200_000,
+    autoAttendance: true,
   };
   let n = 0;
   const block = (date: string, start: string, end: string | null) => ({
@@ -87,6 +88,7 @@ describe("nómina quincenal", () => {
     start,
     end,
     note: "",
+    absent: false,
     source: "operario" as const,
     createdBy: "u1",
     createdAt: "2026-10-01T12:00:00.000Z",
@@ -121,6 +123,29 @@ describe("nómina quincenal", () => {
     expect(paidDaysIn(q, [["2026-10-27", null]])).toBe(5); // ingresó el 27
     expect(paidDaysIn(q, [["2026-01-01", "2026-10-20"]])).toBe(5); // terminó el 20
     expect(paidDaysIn(quincenaOf("2026-02-20"), [["2026-01-01", null]])).toBe(15); // febrero completo
+  });
+
+  it("suma solas las horas del horario hasta ahora; los registros y las faltas mandan", () => {
+    const people = [{ id: "u1", displayName: "Operario", monthlySalary: 2_100_000, transportAllowance: false, employment: [["2026-01-10", null]] as Array<[string, string | null]> }];
+    const quincena = quincenaOf("2026-10-14");
+    // Jueves 15 de octubre a las 10:00: cuentan del 1 al 14 completos y nada del 15 (su primer turno acaba a las 12:00).
+    const now = { date: "2026-10-15", minutes: 10 * 60 };
+    const [auto] = liquidate({ people, entries: [], quincena, calendar: smi, settings, now });
+        // 1 jue 8 · 2 vie 7 · 3 sáb 4 · 5 lun 7 · 6–8 8+8+8 · 9 vie 7 · 10 sáb 4 · 12 festivo · 13–14 8+8 = 77 h.
+    expect(auto!.workedHours).toBe(77);
+    expect(auto!.extrasTotal).toBe(0);
+    expect(auto!.days.find((d) => d.date === "2026-10-05")).toMatchObject({ auto: true, workedMinutes: 7 * 60 });
+
+    const falta = { ...block("2026-10-05", "08:00", "16:30"), absent: true };
+    const morning = block("2026-10-06", "07:30", "12:00");
+    const afternoon = block("2026-10-06", "13:30", "19:00");
+    const [mixed] = liquidate({ people, entries: [falta, morning, afternoon], quincena, calendar: smi, settings, now });
+    expect(mixed!.days.find((d) => d.date === "2026-10-05")).toMatchObject({ absent: true, workedMinutes: 0, auto: false });
+    expect(mixed!.days.find((d) => d.date === "2026-10-06")).toMatchObject({ auto: false, workedMinutes: 10 * 60 });
+    expect(mixed!.hours.extraDay).toBe(2);
+
+    const [off] = liquidate({ people, entries: [], quincena, calendar: smi, settings: { ...settings, autoAttendance: false }, now });
+    expect(off!.workedHours).toBe(0);
   });
 
   it("suma bonificaciones y resta descuentos de la quincena", () => {

@@ -4,7 +4,7 @@ import { minutesOf } from "@/lib/domain/calendar";
 import { diffFields } from "@/lib/domain/diff";
 import { liquidate, overlapsAnother, quincenaByKey, quincenaOf, shiftQuincena, type PayrollPerson, type Quincena } from "@/lib/domain/payroll";
 import type { Attendance, Database, User } from "@/lib/domain/schema";
-import { isRealDate, timeInZone } from "@/lib/domain/time";
+import { isRealDate, timeInZone, todayIn } from "@/lib/domain/time";
 import { isOwner, type Principal } from "../auth/principal";
 import { badRequest, notFound } from "../http";
 import { getDb } from "../store";
@@ -20,6 +20,11 @@ const ENTRY_LABELS = { date: "Fecha", start: "Entrada", end: "Salida", note: "No
 
 function calendarOf(settings: Database["settings"]) {
   return { schedule: settings.production.schedule, skipHolidays: settings.production.skipHolidays };
+}
+
+/** Workshop date and minute of the day, for the automatic schedule hours. */
+export function workshopNow(settings: Database["settings"], at = new Date()) {
+  return { date: todayIn(settings.timezone, at), minutes: minutesOf(timeInZone(at, settings.timezone)) };
 }
 
 /** Marks entrada or salida now (workshop time) for the signed-in person. */
@@ -38,6 +43,7 @@ export async function clock(principal: Principal, action: "in" | "out"): Promise
       const entry: Attendance = {
         id: newId(),
         userId: principal.user.id,
+        absent: false,
         userName: principal.user.displayName,
         date,
         start: time,
@@ -81,6 +87,7 @@ export async function myAttendance(principal: Principal) {
     quincena,
     calendar: calendarOf(settings),
     settings: settings.payroll,
+    now: workshopNow(settings),
   });
   return {
     today: mine.filter((e) => e.date === principal.today).sort((a, b) => a.start.localeCompare(b.start)),
@@ -130,6 +137,21 @@ export async function payrollReport(principal: Principal, key: string | null) {
   const owner = isOwner(principal);
   // Coordinación y asistencia keep the hours log; salaries and money stay with gerencia/administración.
   const people = payrollPeopleFor(docs, entries, principal.today).map((p) => (owner ? p : { ...p, monthlySalary: null, transportAllowance: false }));
+  const now = workshopNow(docs.settings);
+  const calendar = calendarOf(docs.settings);
+  // Hours since the 1st of the month (both quincenas, up to now).
+  const month = quincena.key.slice(0, 7);
+  const monthEntries = docs.attendance.items.filter((e) => e.date.startsWith(month));
+  const monthLines = [1, 2].flatMap((n) =>
+    liquidate({ people, entries: monthEntries, quincena: quincenaByKey(`${month}-${n}`)!, calendar, settings: docs.settings.payroll, now }),
+  );
+  const monthHours = Object.fromEntries(
+    people.map((p) => {
+      const mine = monthLines.filter((l) => l.userId === p.id);
+      const extra = mine.reduce((s, l) => s + Object.values(l.hours).reduce((a, h) => a + h, 0) - l.hours.holidayOrdinary, 0);
+      return [p.id, { worked: mine.reduce((s, l) => s + l.workedHours, 0), extra }];
+    }),
+  );
   return {
     moneyHidden: !owner,
     quincena,
@@ -138,11 +160,15 @@ export async function payrollReport(principal: Principal, key: string | null) {
     current: quincenaOf(principal.today).key,
     settings: docs.settings.payroll,
     people,
+    month,
+    monthHours,
+    autoAttendance: docs.settings.payroll.autoAttendance,
     lines: liquidate({
       people,
       entries,
       quincena,
-      calendar: calendarOf(docs.settings),
+      now,
+      calendar,
       settings: docs.settings.payroll,
       // Bonuses and deductions are money: only gerencia/administración see them.
       adjustments: owner ? docs.payAdjustments.items : [],
@@ -160,6 +186,7 @@ export interface AttendanceInput {
   start: string;
   end: string | null;
   note: string;
+  absent?: boolean;
 }
 
 function validateEntry(input: Pick<AttendanceInput, "date" | "start" | "end">) {
@@ -181,7 +208,8 @@ export async function createAttendance(principal: Principal, input: AttendanceIn
       date: input.date,
       start: input.start,
       end: input.end,
-      note: input.note,
+      note: input.note || (input.absent ? "Falta" : ""),
+      absent: input.absent ?? false,
       source: "admin",
       createdBy: principal.user.id,
       createdAt: now,
