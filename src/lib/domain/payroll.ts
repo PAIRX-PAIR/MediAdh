@@ -113,6 +113,10 @@ export interface DayHours {
   minutes: Record<HourKind, number>;
   /** Blocks without a clock-out (not counted until someone closes them). */
   openEntries: number;
+  /** Hours added by themselves from the schedule (nobody registered that day). */
+  auto: boolean;
+  /** Marked as falta. */
+  absent: boolean;
 }
 
 function nightIntervals(settings: PayrollSettings): Interval[] {
@@ -124,7 +128,7 @@ function nightIntervals(settings: PayrollSettings): Interval[] {
 const roundDown = (minutes: number, block: number) => (block > 0 ? Math.floor(minutes / block) * block : minutes);
 
 export function dayHours(date: string, entries: Attendance[], calendar: WorkCalendar, settings: PayrollSettings): DayHours {
-  const closed = entries.filter((e) => e.date === date && e.end !== null);
+  const closed = entries.filter((e) => e.date === date && e.end !== null && !e.absent);
   const worked = union(closed.map((e) => [minutesOf(e.start), minutesOf(e.end!)]));
   const scheduled = union(shiftsOn(date, calendar).map((s) => [minutesOf(s.start), minutesOf(s.end)]));
   const holiday = holidayName(date);
@@ -150,7 +154,48 @@ export function dayHours(date: string, entries: Attendance[], calendar: WorkCale
     ordinaryMinutes: inside,
     minutes,
     openEntries: entries.filter((e) => e.date === date && e.end === null).length,
+    auto: closed.length > 0 && closed.every((e) => e.source === "auto"),
+    absent: entries.some((e) => e.date === date && e.absent),
   };
+}
+
+/**
+ * Schedule hours that add up by themselves: every workday of the contract up to
+ * now counts its shifts (today, only the shifts already over) unless someone
+ * registered hours or a falta that day. Nothing is stored; real records win.
+ */
+export function autoEntries(
+  person: Pick<PayrollPerson, "id" | "displayName" | "employment">,
+  dates: string[],
+  entries: Attendance[],
+  calendar: WorkCalendar,
+  now: { date: string; minutes: number },
+): Attendance[] {
+  const out: Attendance[] = [];
+  for (const date of dates) {
+    if (date > now.date) break;
+    if (person.employment && !person.employment.some(([from, to]) => date >= from && (to === null || date <= to))) continue;
+    if (entries.some((e) => e.userId === person.id && e.date === date)) continue;
+    for (const s of shiftsOn(date, calendar)) {
+      if (date === now.date && minutesOf(s.end) > now.minutes) continue;
+      out.push({
+        id: `auto-${person.id}-${date}-${s.start}`,
+        userId: person.id,
+        userName: person.displayName,
+        date,
+        start: s.start,
+        end: s.end,
+        note: "Horario (automático)",
+        absent: false,
+        source: "auto",
+        createdBy: "sistema",
+        createdAt: `${date}T00:00:00.000Z`,
+        updatedAt: `${date}T00:00:00.000Z`,
+        history: [],
+      });
+    }
+  }
+  return out;
 }
 
 /* ───────────────────────── Liquidación ───────────────────────── */
@@ -231,11 +276,14 @@ export function liquidate(input: {
   calendar: WorkCalendar;
   settings: PayrollSettings;
   adjustments?: PayAdjustment[];
+  /** Current date and minute of the day: turns on the automatic schedule hours (settings.autoAttendance). */
+  now?: { date: string; minutes: number };
 }): PayrollLine[] {
   const { quincena, calendar, settings } = input;
   const dates = datesOf(quincena);
   return input.people.map((person) => {
-    const mine = input.entries.filter((e) => e.userId === person.id && e.date >= quincena.from && e.date <= quincena.to);
+    const recorded = input.entries.filter((e) => e.userId === person.id && e.date >= quincena.from && e.date <= quincena.to);
+    const mine = input.now && settings.autoAttendance ? [...recorded, ...autoEntries(person, dates, recorded, calendar, input.now)] : recorded;
     const days = dates.map((d) => dayHours(d, mine, calendar, settings));
     const salary = person.monthlySalary ?? 0;
     const hourlyValue = salary / settings.monthlyHours;

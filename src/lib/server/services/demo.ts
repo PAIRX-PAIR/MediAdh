@@ -2,8 +2,8 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { defaultPositions, defaultSettings } from "@/lib/domain/defaults";
 import { minutesOf, shiftsOn } from "@/lib/domain/calendar";
-import { quincenaOf } from "@/lib/domain/payroll";
 import type { Attendance, Collection, Database, Notification, Position, Task, User } from "@/lib/domain/schema";
+import { quincenaOf, shiftQuincena } from "@/lib/domain/payroll";
 import { addDays, todayIn } from "@/lib/domain/time";
 import { hashPassword } from "../auth/password";
 import { docPath, filesFor } from "../store/db";
@@ -255,13 +255,15 @@ export async function seedDemo(raw: RawStore) {
   const attendance: Attendance[] = [];
   const hhmm = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
   let dayIndex = 0;
-  for (let d = quincenaOf(today).from; d < today; d = addDays(d, 1), dayIndex++) {
+  // From the start of the previous quincena: both the current and the previous one have hours to show.
+  for (let d = shiftQuincena(quincenaOf(today), -1).from; d < today; d = addDays(d, 1), dayIndex++) {
     const shifts = shiftsOn(d, { schedule: settings.production.schedule, skipHolidays: true });
     crew.forEach((u, i) =>
       shifts.forEach((shift, k) => {
         const overtime = k === shifts.length - 1 && (i + dayIndex) % 4 === 0 ? 60 + 30 * (i % 2) : 0;
         attendance.push({
           id: randomUUID(),
+          absent: false,
           userId: u.id,
           userName: u.displayName,
           date: d,

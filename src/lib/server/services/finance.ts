@@ -5,7 +5,7 @@ import { dateInZone } from "@/lib/domain/time";
 import type { Principal } from "../auth/principal";
 import { badRequest } from "../http";
 import { getDb } from "../store";
-import { payrollPeopleFor } from "./payroll";
+import { payrollPeopleFor, workshopNow } from "./payroll";
 
 /**
  * Ganancias del mes (gerencia y administración): ventas de los trabajos
@@ -46,8 +46,9 @@ export async function financeReport(principal: Principal, monthParam: string | n
   const entries = docs.attendance.items.filter((e) => e.date >= q1.from && e.date <= q2.to);
   const people = payrollPeopleFor(docs, entries, principal.today);
   const adjustments = docs.payAdjustments.items;
-  const lines1 = liquidate({ people, entries, quincena: q1, calendar, settings: docs.settings.payroll, adjustments });
-  const lines2 = liquidate({ people, entries, quincena: q2, calendar, settings: docs.settings.payroll, adjustments });
+  const now = workshopNow(docs.settings);
+  const lines1 = liquidate({ people, entries, quincena: q1, calendar, settings: docs.settings.payroll, adjustments, now });
+  const lines2 = liquidate({ people, entries, quincena: q2, calendar, settings: docs.settings.payroll, adjustments, now });
   const employerPct = docs.settings.finance.employerCostPct / 100;
   const payroll = people.map((p, i) => {
     const a = lines1[i]!;

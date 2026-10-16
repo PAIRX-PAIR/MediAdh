@@ -17,6 +17,11 @@ import type { PayrollSettings } from "@/lib/domain/schema";
 const hrs = (n: number) => `${n.toLocaleString("es-CO", { maximumFractionDigits: 2 })} h`;
 const EXTRA_KINDS = HOUR_KINDS.filter((k) => k !== "holidayOrdinary");
 const extraHours = (l: PayrollLine) => EXTRA_KINDS.reduce((sum, k) => sum + l.hours[k], 0);
+/** Hours since the 1st of the month (both quincenas, up to now). */
+const monthLabel = (report: PayrollReport, userId: string) => {
+  const m = report.monthHours[userId];
+  return m ? `${hrs(m.worked)}${m.extra > 0 ? ` · ${hrs(m.extra)} extra` : ""}` : "—";
+};
 
 function periodLabel(r: PayrollReport) {
   return `${formatDate(r.quincena.from, { day: "numeric" })} al ${formatDate(r.quincena.to, { day: "numeric", month: "long", year: "numeric" })}`;
@@ -152,6 +157,7 @@ export function PayrollScreen() {
                   money
                     ? [
                         ["Trabajadas / horario", `${hrs(l.workedHours)} / ${hrs(l.scheduledHours)}`],
+                        ["Acumulado del mes", monthLabel(report, l.userId)],
                         [`Básico (${l.paidDays} días)`, formatCop(l.basic)],
                         ["Horas extra", `${hrs(extraHours(l))} · ${formatCop(l.extrasTotal)}`],
                         ["Auxilio de transporte", formatCop(l.transport)],
@@ -160,6 +166,7 @@ export function PayrollScreen() {
                       ]
                     : [
                         ["Trabajadas / horario", `${hrs(l.workedHours)} / ${hrs(l.scheduledHours)}`],
+                        ["Acumulado del mes", monthLabel(report, l.userId)],
                         ["Horas extra", hrs(extraHours(l))],
                         ...EXTRA_KINDS.filter((k) => l.hours[k] > 0).map((k): [string, string] => [HOUR_KIND_LABEL[k], hrs(l.hours[k])]),
                       ]
@@ -194,7 +201,12 @@ function PersonModal({ report, line, onClose, onChanged }: { report: PayrollRepo
   const { run, busy } = useAction();
   const { confirm, dialog } = useConfirm();
   const entries = report.entries.filter((e) => e.userId === line.userId);
-  const days = line.days.filter((d) => d.workedMinutes > 0 || d.openEntries > 0);
+  const days = line.days.filter((d) => d.workedMinutes > 0 || d.openEntries > 0 || d.absent);
+  const markAbsent = async (date: string) => {
+    if (!(await confirm({ title: `¿Marcar falta el ${formatDate(date, { weekday: "long", day: "numeric" })}?`, body: "Ese día deja de sumar horas.", confirmLabel: "Marcar falta", danger: true }))) return;
+    const ok = await run(`falta-${date}`, () => api.attendance.create({ userId: line.userId, date, start: "00:00", end: "00:01", note: "Falta", absent: true }), "Falta registrada");
+    if (ok) await onChanged();
+  };
 
   return (
     <Modal open onClose={onClose} title={line.name} description={`Quincena del ${periodLabel(report)}`} size="xl">
@@ -295,14 +307,39 @@ function PersonModal({ report, line, onClose, onChanged }: { report: PayrollRepo
                       <span className="inline-block font-semibold text-ink first-letter:uppercase">{formatDate(d.date, { weekday: "long", day: "numeric", month: "short" })}</span>
                       <span className="flex flex-wrap items-center gap-2">
                         {d.special && <Chip tone="pending">{d.special}</Chip>}
+                        {d.auto && <Chip tone="neutral">Automático (horario)</Chip>}
+                        {d.absent && <Chip tone="blocked">Falta</Chip>}
                         <span className="tabular text-muted">
                           {hrs(d.workedMinutes / 60)} trabajadas{extra > 0 ? ` · ${hrs(extra / 60)} extra` : ""}
                         </span>
+                        {d.auto && (
+                          <Button size="sm" variant="ghost" loading={busy === `falta-${d.date}`} onClick={() => void markAbsent(d.date)}>
+                            Marcar falta
+                          </Button>
+                        )}
                       </span>
                     </div>
                     <ul className="flex flex-col gap-2">
                       {entries
-                        .filter((e) => e.date === d.date)
+                        .filter((e) => e.date === d.date && e.absent)
+                        .map((e) => (
+                          <li key={e.id} className="flex items-center justify-between gap-2 text-sm text-muted">
+                            <span>Falta registrada{e.note && e.note !== "Falta" ? ` · ${e.note}` : ""}</span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              loading={busy === `rm-${e.id}`}
+                              onClick={async () => {
+                                const ok = await run(`rm-${e.id}`, () => api.attendance.remove(e.id), "Falta quitada");
+                                if (ok) await onChanged();
+                              }}
+                            >
+                              Quitar falta
+                            </Button>
+                          </li>
+                        ))}
+                      {entries
+                        .filter((e) => e.date === d.date && !e.absent)
                         .map((e) => (
                           <EntryRow
                             key={`${e.id}-${e.start}-${e.end}`}
@@ -430,6 +467,13 @@ function RulesModal({ settings, onClose, onSaved }: { settings: PayrollSettings;
         <Field label="Auxilio de transporte mensual" hint="Valor del año; se paga la mitad en cada quincena a quien lo tenga.">
           {(id, d) => <MoneyInput id={id} ariaDescribedBy={d} value={form.transportAllowance} onChange={(v) => set("transportAllowance", v ?? 0)} allowEmpty={false} />}
         </Field>
+        <label className="flex items-start gap-2 text-sm text-ink-soft sm:col-span-2">
+          <input type="checkbox" checked={form.autoAttendance} onChange={(e) => set("autoAttendance", e.target.checked)} className="mt-0.5 size-5 accent-[var(--color-glow)]" />
+          <span>
+            <span className="font-semibold text-ink">Sumar solas las horas del horario cada día</span>
+            <span className="block text-xs text-muted">Desde el inicio del contrato, cada día de trabajo suma sus turnos al terminar. Lo que se registre a mano o una falta reemplaza ese día.</span>
+          </span>
+        </label>
         {pct("extraDayPct", "Recargo hora extra diurna", "Ley: 25 %")}
         {pct("extraNightPct", "Recargo hora extra nocturna", "Ley: 75 %")}
         {pct("sundayHolidayPct", "Recargo dominical y festivo", "Ley 2466/2025: 90 % desde jul-2026, 100 % desde jul-2027")}
