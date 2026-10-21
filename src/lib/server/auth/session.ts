@@ -77,3 +77,38 @@ export async function readSessionToken(): Promise<string | null> {
   const store = await cookies();
   return store.get(SESSION_COOKIE)?.value ?? null;
 }
+
+/**
+ * "Trusted browser": a signed cookie set at every successful login. While an
+ * account is locked by failed attempts (anyone can trigger that by guessing its
+ * username), the real owner can still sign in from a browser that has it. The
+ * password is always verified, so this only lifts the lockout.
+ */
+export const TRUST_COOKIE = isProduction ? "__Host-smi_trust" : "smi_trust";
+const TRUST_DAYS = 90;
+const TRUST_AUDIENCE = "smi-taller-trust";
+
+export async function setTrustCookie(userId: string) {
+  const token = await new SignJWT({})
+    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setSubject(userId)
+    .setIssuer(ISSUER)
+    .setAudience(TRUST_AUDIENCE)
+    .setIssuedAt()
+    .setExpirationTime(`${TRUST_DAYS}d`)
+    .sign(sessionSecret());
+  const store = await cookies();
+  store.set(TRUST_COOKIE, token, { httpOnly: true, secure: isProduction, sameSite: "lax", path: "/", maxAge: TRUST_DAYS * 24 * 3600 });
+}
+
+export async function isTrustedFor(userId: string): Promise<boolean> {
+  try {
+    const raw = (await cookies()).get(TRUST_COOKIE)?.value;
+    if (!raw) return false;
+    const { payload } = await jwtVerify(raw, sessionSecret(), { algorithms: ["HS256"], issuer: ISSUER, audience: TRUST_AUDIENCE });
+    return payload.sub === userId;
+  } catch {
+    // No request context (tests) or an invalid cookie.
+    return false;
+  }
+}

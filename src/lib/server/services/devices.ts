@@ -26,6 +26,8 @@ import type { RequestInput } from "./work";
 export const DEVICE_COOKIE = isProduction ? "__Host-smi_device" : "smi_device";
 const DEVICE_DAYS = 365;
 const PENDING_MINUTES = 10;
+/** Anonymous requests each write a commit: cap the open ones so a flood cannot exhaust GitHub's write limit. */
+const MAX_PENDING_DEVICES = 30;
 /** No 0/O, 1/I/L: easy to read aloud or type. */
 const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
@@ -66,7 +68,7 @@ export async function clearDeviceCookie() {
 /** Drops expired requests and long-revoked phones so the document stays small. */
 function prune(items: Device[], now: number): Device[] {
   return items.filter((d) => {
-    if (d.status === "pendiente") return Date.parse(d.expiresAt) > now - 86_400_000;
+    if (d.status === "pendiente") return Date.parse(d.expiresAt) > now - 3_600_000;
     if (d.status === "revocado") return Date.parse(d.revokedAt ?? d.createdAt) > now - 90 * 86_400_000;
     return true;
   });
@@ -109,6 +111,8 @@ export async function requestDevice(userAgent: string | null): Promise<DeviceSta
   const device = await getDb().transact(["devices"], "Un celular pide acceso", ({ devices }) => {
     const now = Date.now();
     devices.items = prune(devices.items, now);
+    const open = devices.items.filter((d) => d.status === "pendiente" && Date.parse(d.expiresAt) > now).length;
+    if (open >= MAX_PENDING_DEVICES) throw new HttpError(429, "Hay demasiadas solicitudes de acceso abiertas. Espera unos minutos.", "too_many_pending_devices");
     let code = newCode();
     while (devices.items.some((d) => d.status === "pendiente" && d.code === code)) code = newCode();
     const entry: Device = {

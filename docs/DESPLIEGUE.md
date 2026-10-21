@@ -21,10 +21,10 @@ Importa `PAIRX-PAIR/MediAdh` en Vercel (framework Next.js, Node 24). Variables d
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | `npm run vapid` (una sola vez; no rotarlas) |
 | `VAPID_SUBJECT` | `mailto:` con un correo real del taller |
 | `APP_URL` | `https://tu-dominio` |
-| `ADMIN_BOOTSTRAP_USERNAME` | `judago` |
+| `ADMIN_BOOTSTRAP_USERNAME` | usuario del primer administrador |
 | `ADMIN_BOOTSTRAP_NAME` | nombre visible |
 | `ADMIN_BOOTSTRAP_PASSWORD_HASH` | el hash de `.env.local` **sin** las barras `\` (en Vercel va tal cual: `scrypt$131072$8$1$...`) |
-| `ADMIN_BOOTSTRAP_2_USERNAME`, `_2_NAME`, `_2_PASSWORD_HASH` | segundo administrador (`ax95`), igual que el anterior |
+| `ADMIN_BOOTSTRAP_2_USERNAME`, `_2_NAME`, `_2_PASSWORD_HASH` | segundo administrador, igual que el anterior |
 | `ANDROID_PACKAGE_ID`, `ANDROID_CERT_SHA256` | ver `docs/APK.md` (cuando generes el APK) |
 
 `SETUP_KEY` ya no hace falta si usas el administrador declarado. Si prefieres `/setup`, defínela, crea el admin y bórrala.
@@ -49,7 +49,7 @@ Crea a cada persona en su puesto. Los operarios quedan sin usuario: autorizan su
 
 ## 6. Primer ingreso
 
-Entra con `judago` (y `ax95`). La app crea la cuenta, pide aceptar la política de datos y queda lista. Luego **borra** las variables `ADMIN_BOOTSTRAP_*` en Vercel y vuelve a desplegar. Los datos de la empresa, el horario y las reglas del cotizador ya vienen cargados; falta poner la tarifa de cada máquina, los sueldos (Nómina) y la tabla del IPC.
+Entra con esas cuentas. La app crea la cuenta, pide aceptar la política de datos y queda lista. Luego **borra** las variables `ADMIN_BOOTSTRAP_*` en Vercel y vuelve a desplegar. Los datos de la empresa, el horario y las reglas del cotizador ya vienen cargados; falta poner la tarifa de cada máquina, los sueldos (Nómina) y la tabla del IPC.
 
 ## 7. Verificación
 

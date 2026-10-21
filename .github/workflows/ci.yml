@@ -19,6 +19,8 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
+      - name: Dependencias con fallas conocidas (alta o crítica)
+        run: npm audit --omit=dev --audit-level=high
       - run: npm run check
       - name: Build
         run: npm run build

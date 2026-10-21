@@ -4,7 +4,7 @@ import { passwordInput } from "@/lib/server/inputs";
 import { route } from "@/lib/server/route";
 import { changePassword } from "@/lib/server/services/auth";
 
-export const POST = route({ access: "user", allowIncomplete: true }, async ({ req, principal }) => {
+export const POST = route({ access: "user", allowIncomplete: true, manageSession: true }, async ({ req, principal }) => {
   const input = await readJson(req, passwordInput);
   const token = await changePassword(principal, input);
   await setSessionCookie(token);

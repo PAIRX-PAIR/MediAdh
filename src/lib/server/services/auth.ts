@@ -5,7 +5,7 @@ import type { Notification, User } from "@/lib/domain/schema";
 import { todayIn } from "@/lib/domain/time";
 import { burnPasswordCheck, hashPassword, needsRehash, passwordProblems, verifyPassword } from "../auth/password";
 import type { Principal } from "../auth/principal";
-import { createSessionToken } from "../auth/session";
+import { createSessionToken, isTrustedFor } from "../auth/session";
 import { badRequest, conflict, forbidden, HttpError, tooMany } from "../http";
 import { consume } from "../rate-limit";
 import { getDb } from "../store";
@@ -13,8 +13,8 @@ import { audit, newId, normalizeUsername, nowIso, pushNotification, USERNAME_PAT
 
 const GENERIC_LOGIN_ERROR = "Usuario o contraseña incorrectos.";
 const LOCK_STEPS = [
-  { failures: 15, minutes: 24 * 60 },
-  { failures: 10, minutes: 60 },
+  { failures: 15, minutes: 60 },
+  { failures: 10, minutes: 30 },
   { failures: 5, minutes: 15 },
 ];
 
@@ -93,9 +93,11 @@ export async function login(input: { username: string; password: string }, ip: s
   const username = normalizeUsername(input.username);
 
   // Throttle before hashing: scrypt is deliberately expensive (DoS vector).
+  // The per-IP check goes first and alone: attacker-chosen usernames must not fill the limiter with keys.
   const byIp = consume(`login:ip:${ip}`, 30, 15 * 60_000);
-  const byPair = consume(`login:pair:${ip}:${username}`, 8, 15 * 60_000);
-  if (!byIp.ok || !byPair.ok) throw tooMany(Math.max(byIp.retryAfterSeconds, byPair.retryAfterSeconds));
+  if (!byIp.ok) throw tooMany(byIp.retryAfterSeconds);
+  const byPair = consume(`login:pair:${ip}:${username.slice(0, 40)}`, 8, 15 * 60_000);
+  if (!byPair.ok) throw tooMany(byPair.retryAfterSeconds);
 
   await ensureBootstrapAdmin(username);
   const db = getDb();
@@ -106,7 +108,7 @@ export async function login(input: { username: string; password: string }, ip: s
     throw new HttpError(401, GENERIC_LOGIN_ERROR, "invalid_credentials");
   }
 
-  if (user.lockedUntil && new Date(user.lockedUntil).getTime() > Date.now()) {
+  if (user.lockedUntil && new Date(user.lockedUntil).getTime() > Date.now() && !(await isTrustedFor(user.id))) {
     const minutes = Math.ceil((new Date(user.lockedUntil).getTime() - Date.now()) / 60_000);
     throw tooMany(minutes * 60, `Demasiados intentos fallidos. Intenta de nuevo en ${minutes} min.`);
   }

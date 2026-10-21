@@ -11,6 +11,8 @@ export const POST = route({ access: "public" }, async ({ req }) => {
   // Generous: every phone on the workshop WiFi shares one public IP.
   const limit = consume(`device:${clientIp(req.headers)}`, 40, 10 * 60_000);
   if (!limit.ok) throw new HttpError(429, "Demasiadas solicitudes. Espera unos minutos.", "rate_limited");
+  const global = consume("device:global", 60, 10 * 60_000);
+  if (!global.ok) throw new HttpError(429, "Demasiadas solicitudes. Espera unos minutos.", "rate_limited");
   return json(await requestDevice(req.headers.get("user-agent")), { status: 201 });
 });
 

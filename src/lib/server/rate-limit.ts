@@ -46,10 +46,22 @@ function prune(now: number) {
   while (buckets.size > MAX_KEYS) buckets.delete(buckets.keys().next().value!);
 }
 
+/** IPv6: one attacker controls a whole /64, so limit by prefix instead of the exact address. */
+export function normalizeIp(ip: string): string {
+  if (!ip.includes(":") || ip.includes(".")) return ip;
+  const [a = "", b] = ip.toLowerCase().split("::");
+  const left = a ? a.split(":") : [];
+  const right = b ? b.split(":") : [];
+  const groups = b === undefined ? left : [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill("0"), ...right];
+  return `${groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, "")).join(":")}::/64`;
+}
+
+/** The platform sets these headers itself (a client cannot forge them on Vercel); `x-vercel-forwarded-for` goes first. */
 export function clientIp(headers: Headers): string {
-  return (
-    headers.get("x-real-ip")?.trim() ||
-    headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    "unknown"
+  return normalizeIp(
+    headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() ||
+      headers.get("x-real-ip")?.trim() ||
+      headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      "unknown",
   );
 }
