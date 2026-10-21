@@ -146,7 +146,11 @@ function buildSupplies(inputs: SupplyInput[], previous: SupplyLine[]): SupplyLin
     supplier: s.supplier,
     quantity: s.quantity,
     unitCost: s.unitCost,
-  }));
+  })).map((line) => {
+    const prev = previous.find((p) => p.id === line.id);
+    // Editing a line keeps whether it was already obtained.
+    return { ...line, status: prev?.status ?? "pendiente", obtainedAt: prev?.obtainedAt ?? null, obtainedBy: prev?.obtainedBy ?? null };
+  });
 }
 
 /** Task priority shown to the worker, derived from the order. */
@@ -490,7 +494,19 @@ function applySupplyAction(order: Order, actor: Actor, input: Extract<OrderActio
     return;
   }
   const line = order.requiredSupplies.find((l) => l.id === input.supplyId);
-  if (!line) throw notFound("Ese insumo no está en esta orden.");
+  if (!line) {
+    // Una línea de «Editar → Insumos» también se marca «Ya está»; solo se quita editando la orden.
+    const costLine = input.action === "supplyDone" ? order.supplies.find((l) => l.id === input.supplyId) : undefined;
+    if (input.action !== "supplyDone" || !costLine) throw notFound("Ese insumo no está en esta orden.");
+    if ((costLine.status === "conseguido") === input.done) return;
+    costLine.status = input.done ? "conseguido" : "pendiente";
+    costLine.obtainedAt = input.done ? now : null;
+    costLine.obtainedBy = input.done ? actor.id : null;
+    track(order, actor, input.done ? "Ya está el insumo" : "Volvió a pedir un insumo", [
+      { field: "supplies", label: costLine.description, from: input.done ? "Pendiente" : "Conseguido", to: input.done ? "Conseguido" : "Pendiente" },
+    ]);
+    return;
+  }
   if (input.action === "supplyRemove") {
     order.requiredSupplies = order.requiredSupplies.filter((l) => l.id !== line.id);
     track(order, actor, "Quitó un insumo requerido", [{ field: "requiredSupplies", label: "Insumo requerido", from: line.name, to: null }]);

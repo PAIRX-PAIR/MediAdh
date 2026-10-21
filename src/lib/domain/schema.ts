@@ -382,6 +382,10 @@ export const supplyLineSchema = z.object({
   supplier: z.string().default(""),
   quantity: z.number().min(0),
   unitCost: z.number().min(0),
+  /** Lo que se anota en «Editar» también es un insumo por conseguir: sale en la lista de Insumos hasta que se marque «Ya está». */
+  status: z.enum(["pendiente", "conseguido"]).default("pendiente"),
+  obtainedAt: isoDateTime.nullable().default(null),
+  obtainedBy: z.string().nullable().default(null),
 });
 export type SupplyLine = z.infer<typeof supplyLineSchema>;
 

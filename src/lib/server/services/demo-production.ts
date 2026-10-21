@@ -195,7 +195,7 @@ export function demoProduction(ctx: DemoContext) {
         intake: { receivedAt: at(received, "08:30"), quantity: 1 + Math.floor(random() * 20), condition: "" },
         due: { date: due, time: "17:00" },
         workItems,
-        supplies: [{ id: randomUUID(), description: "Material (ficticio)", supplier: "Aceros del Valle (ficticio)", quantity: 1, unitCost: Math.round(price * 0.18) }],
+        supplies: [{ id: randomUUID(), description: "Material (ficticio)", supplier: "Aceros del Valle (ficticio)", quantity: 1, unitCost: Math.round(price * 0.18), status: "conseguido" as const, obtainedAt: null, obtainedBy: null }],
         price,
         finalPrice: price,
         startedAt: at(received, "10:00"),

@@ -138,7 +138,8 @@ export function OrderFormModal({ order, onClose, onSaved }: { order?: OrderView 
             <RouteEditor items={form.workItems} onChange={(items) => set("workItems", items)} machines={prod.machines} positions={data.positions} locked={locked} />
           </div>
           <div>
-            <p className="mb-2 text-sm font-medium text-ink-soft">Insumos y proveedores</p>
+            <p className="text-sm font-medium text-ink-soft">Insumos y proveedores</p>
+            <p className="mb-2 text-xs text-muted">Lo que anotes aquí también aparece en la lista de Insumos hasta que lo marques «Ya está». Su costo cuenta en las ganancias.</p>
             <SuppliesEditor items={form.supplies} onChange={(items) => set("supplies", items)} />
           </div>
           <Field label="Notas internas">{(id) => <Textarea id={id} rows={2} value={form.notes} onChange={(e) => set("notes", e.target.value)} />}</Field>
