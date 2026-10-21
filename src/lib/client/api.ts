@@ -222,7 +222,10 @@ export type OrderActionInput =
   | { action: "resolveClaim"; claimId: string; resolution: string }
   | { action: "satisfaction"; value: number | null }
   | { action: "cancel"; reason: string | null }
-  | { action: "reopen" };
+  | { action: "reopen" }
+  | { action: "supplyAdd"; name: string; quantity: number; unit: string | null; note: string | null }
+  | { action: "supplyRemove"; supplyId: string }
+  | { action: "supplyDone"; supplyId: string; done: boolean };
 
 export interface HistoricalInput {
   clientId: string | null;

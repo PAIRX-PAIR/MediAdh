@@ -133,6 +133,7 @@ export function demoProduction(ctx: DemoContext) {
       due: null,
       workItems: [],
       supplies: [],
+      requiredSupplies: [],
       quoteId: null,
       price: null,
       finalPrice: null,

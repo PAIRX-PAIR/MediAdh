@@ -15,6 +15,7 @@ import type {
   OrderStatus,
   Position,
   Process,
+  RequiredSupply,
   SupplyLine,
   Task,
   TaskPriority,
@@ -325,6 +326,7 @@ export function createOrderIn(docs: OrderDocs, principal: Principal, input: Orde
     due: input.due,
     workItems: buildWorkItems(input.workItems, [], docs.machines.items, docs.positions.items),
     supplies: buildSupplies(input.supplies, []),
+    requiredSupplies: [],
     quoteId: extra.quoteId ?? null,
     price: input.price,
     finalPrice: null,
@@ -438,7 +440,13 @@ export type OrderAction =
   | { action: "resolveClaim"; claimId: string; resolution: string }
   | { action: "satisfaction"; value: number | null }
   | { action: "cancel"; reason: string | null }
-  | { action: "reopen" };
+  | { action: "reopen" }
+  | { action: "supplyAdd"; name: string; quantity: number; unit: string | null; note: string | null }
+  | { action: "supplyRemove"; supplyId: string }
+  | { action: "supplyDone"; supplyId: string; done: boolean };
+
+/** Orders that can still ask for or receive supplies. */
+const SUPPLY_STATUSES: OrderStatus[] = ["recibida", "en_proceso", "terminada", "garantia"];
 
 export function closeService(docs: Pick<OrderDocs, "notifications">, order: Order, actor: Actor, automatic: boolean): Notification {
   order.status = "cerrada";
@@ -457,6 +465,44 @@ export function closeService(docs: Pick<OrderDocs, "notifications">, order: Orde
   });
 }
 
+
+/**
+ * Insumos requeridos de UNA orden. Marcar «conseguido» solo toca la línea de
+ * esta orden: otra orden que pida el mismo insumo conserva su propia línea.
+ */
+function applySupplyAction(order: Order, actor: Actor, input: Extract<OrderAction, { action: `supply${string}` }>, now: string) {
+  if (input.action === "supplyAdd") {
+    const line: RequiredSupply = {
+      id: newId(),
+      name: input.name.trim(),
+      quantity: input.quantity,
+      unit: input.unit?.trim() ?? "",
+      note: input.note?.trim() ?? "",
+      status: "pendiente",
+      requestedAt: now,
+      requestedBy: actor.id,
+      obtainedAt: null,
+      obtainedBy: null,
+    };
+    order.requiredSupplies.push(line);
+    track(order, actor, "Pidió un insumo", [{ field: "requiredSupplies", label: "Insumo requerido", from: null, to: `${line.name} · ${line.quantity}${line.unit ? ` ${line.unit}` : ""}` }]);
+    return;
+  }
+  const line = order.requiredSupplies.find((l) => l.id === input.supplyId);
+  if (!line) throw notFound("Ese insumo no está en esta orden.");
+  if (input.action === "supplyRemove") {
+    order.requiredSupplies = order.requiredSupplies.filter((l) => l.id !== line.id);
+    track(order, actor, "Quitó un insumo requerido", [{ field: "requiredSupplies", label: "Insumo requerido", from: line.name, to: null }]);
+    return;
+  }
+  if ((line.status === "conseguido") === input.done) return;
+  line.status = input.done ? "conseguido" : "pendiente";
+  line.obtainedAt = input.done ? now : null;
+  line.obtainedBy = input.done ? actor.id : null;
+  track(order, actor, input.done ? "Ya está el insumo" : "Volvió a pedir un insumo", [
+    { field: "requiredSupplies", label: line.name, from: input.done ? "Pendiente" : "Conseguido", to: input.done ? "Conseguido" : "Pendiente" },
+  ]);
+}
 
 export async function orderAction(principal: Principal, id: string, input: OrderAction) {
   return getDb().transact([...ORDER_DOCS, "settings"], "Acción sobre una orden de trabajo", (docs) => {
@@ -584,6 +630,13 @@ export async function orderAction(principal: Principal, id: string, input: Order
         statusChange("recibida", "Reabrió la orden");
         break;
       }
+      case "supplyAdd":
+      case "supplyRemove":
+      case "supplyDone": {
+        if (!SUPPLY_STATUSES.includes(from)) throw conflict("Esta orden ya no está en curso: no admite cambios en sus insumos.");
+        applySupplyAction(order, actor, input, now);
+        break;
+      }
     }
 
     notifications.push(...syncTasks(docs, order, actor, principal.today));
@@ -655,6 +708,7 @@ export async function createHistoricalOrder(principal: Principal, input: Histori
         completedAt: delivered,
       })),
       supplies: buildSupplies(input.supplies, []),
+      requiredSupplies: [],
       quoteId: null,
       price: input.price,
       finalPrice: input.price,

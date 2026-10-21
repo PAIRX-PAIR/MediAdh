@@ -6,6 +6,7 @@ import {
   CircleCheckBig,
   Edit3,
   PackageCheck,
+  PackageSearch,
   Play,
   Receipt,
   RotateCcw,
@@ -28,6 +29,7 @@ import { autoCloseAt, orderMoney, warrantyStatus, type WarrantyStatus } from "@/
 import { formatCop } from "@/lib/domain/quote";
 import type { ClaimKind, Order } from "@/lib/domain/schema";
 import { DueBadge, OrderStatusChip } from "./order-parts";
+import { RequiredSuppliesModal } from "./required-supplies";
 
 type Tab = "resumen" | "ruta" | "archivos" | "dinero" | "historial";
 
@@ -39,7 +41,7 @@ export function OrderDetailModal({ orderId, onClose, onEdit, initialTab = "resum
   const [tab, setTab] = useState<Tab>(initialTab);
   const { run, busy } = useAction();
   const { confirm, dialog } = useConfirm();
-  const [sheet, setSheet] = useState<null | "deliver" | "invoice" | "claim" | "resolve" | "cancel">(null);
+  const [sheet, setSheet] = useState<null | "deliver" | "invoice" | "claim" | "resolve" | "cancel" | "supplies">(null);
 
   // The change log is not in the live payload; fetch the full order (and re-fetch when it changes).
   useEffect(() => {
@@ -68,6 +70,7 @@ export function OrderDetailModal({ orderId, onClose, onEdit, initialTab = "resum
   const s = order.status;
   const closeAt = s === "entregada" ? autoCloseAt(order, prod.settings?.claimWindowDays ?? 3) : null;
   const openClaims = order.claims.filter((c) => !c.resolvedAt);
+  const pendingSupplies = order.requiredSupplies.filter((l) => l.status === "pendiente").length;
   const planned = prod.schedule.jobs.filter((j) => j.orderId === order.id);
 
   const actions = (
@@ -75,6 +78,12 @@ export function OrderDetailModal({ orderId, onClose, onEdit, initialTab = "resum
       {["recibida", "en_proceso", "garantia", "terminada", "entregada"].includes(s) && (
         <Button size="sm" variant="secondary" icon={<Edit3 className="size-4" />} onClick={onEdit}>
           Editar
+        </Button>
+      )}
+      {s !== "cancelada" && (
+        <Button size="sm" variant="secondary" icon={<PackageSearch className="size-4" />} onClick={() => setSheet("supplies")}>
+          Insumos requeridos
+          {pendingSupplies > 0 ? ` (${pendingSupplies})` : ""}
         </Button>
       )}
       {s === "recibida" && (
@@ -353,6 +362,7 @@ export function OrderDetailModal({ orderId, onClose, onEdit, initialTab = "resum
       {sheet === "claim" && <ClaimSheet orderId={order.id} onClose={() => setSheet(null)} />}
       {sheet === "resolve" && openClaims[0] && <ResolveSheet orderId={order.id} claims={openClaims} onClose={() => setSheet(null)} />}
       {sheet === "cancel" && <CancelSheet orderId={order.id} onClose={() => setSheet(null)} />}
+      {sheet === "supplies" && <RequiredSuppliesModal orderId={order.id} onClose={() => setSheet(null)} />}
       {dialog}
     </Modal>
   );

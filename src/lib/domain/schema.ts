@@ -385,6 +385,28 @@ export const supplyLineSchema = z.object({
 });
 export type SupplyLine = z.infer<typeof supplyLineSchema>;
 
+export const REQUIRED_SUPPLY_STATUSES = ["pendiente", "conseguido"] as const;
+export type RequiredSupplyStatus = (typeof REQUIRED_SUPPLY_STATUSES)[number];
+
+/**
+ * Insumo que ESTA orden necesita conseguir (distinto de `supplies`, que es el
+ * costo de lo ya comprado). El listado general se arma leyendo estas líneas de
+ * todas las órdenes, así que marcar una solo afecta a su orden de origen.
+ */
+export const requiredSupplySchema = z.object({
+  id,
+  name: z.string().min(1).max(120),
+  quantity: z.number().gt(0),
+  unit: z.string().max(24).default(""),
+  note: z.string().max(300).default(""),
+  status: z.enum(REQUIRED_SUPPLY_STATUSES).default("pendiente"),
+  requestedAt: isoDateTime,
+  requestedBy: z.string().nullable().default(null),
+  obtainedAt: isoDateTime.nullable().default(null),
+  obtainedBy: z.string().nullable().default(null),
+});
+export type RequiredSupply = z.infer<typeof requiredSupplySchema>;
+
 export const CLAIM_KINDS = ["garantia", "devolucion"] as const;
 export type ClaimKind = (typeof CLAIM_KINDS)[number];
 
@@ -438,6 +460,8 @@ export const orderSchema = z.object({
     .default(null),
   workItems: z.array(workItemSchema).default([]),
   supplies: z.array(supplyLineSchema).default([]),
+  /** Insumos por conseguir para esta orden (alimentan «Insumos requeridos»). */
+  requiredSupplies: z.array(requiredSupplySchema).default([]),
   quoteId: z.string().nullable().default(null),
   /** Agreed price before VAT (COP). */
   price: z.number().min(0).nullable().default(null),
