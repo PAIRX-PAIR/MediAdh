@@ -8,7 +8,7 @@ import { api } from "@/lib/client/api";
 import { useAction } from "@/lib/client/use-action";
 import { useProduction } from "@/lib/client/use-production";
 import { formatDate } from "@/lib/domain/labels";
-import { formatQuantity } from "@/lib/domain/supplies";
+import { formatQuantity, orderSupplyLines } from "@/lib/domain/supplies";
 
 export const UNIT_SUGGESTIONS = ["unidades", "kg", "g", "m", "cm", "mm", "pulgadas", "litros", "galones", "hojas", "cajas", "pares"];
 
@@ -25,9 +25,9 @@ export function RequiredSuppliesModal({ orderId, onClose }: { orderId: string; o
 
   if (!order) return null;
   const editable = ["recibida", "en_proceso", "terminada", "garantia"].includes(order.status);
-  const lines = order.requiredSupplies;
-  const pending = lines.filter((l) => l.status === "pendiente");
-  const done = lines.filter((l) => l.status === "conseguido");
+  const lines = orderSupplyLines(order);
+  const pending = lines.filter((l) => l.supply.status === "pendiente");
+  const done = lines.filter((l) => l.supply.status === "conseguido");
   const qty = Number(quantity.replace(",", "."));
   const valid = name.trim().length > 0 && Number.isFinite(qty) && qty > 0;
 
@@ -50,7 +50,7 @@ export function RequiredSuppliesModal({ orderId, onClose }: { orderId: string; o
       onClose={onClose}
       size="lg"
       title={`Insumos requeridos · ${order.folio}`}
-      description={`${order.title} · ${order.clientName}. Lo que agregues aquí también aparece en el listado general de Insumos.`}
+      description={`${order.title} · ${order.clientName}. Lo que agregues aquí, y lo que anotes en Editar → Insumos, aparece en el listado general de Insumos.`}
     >
       <div className="flex flex-col gap-5">
         {editable && (
@@ -94,7 +94,7 @@ export function RequiredSuppliesModal({ orderId, onClose }: { orderId: string; o
             <p className="text-sm text-muted">{lines.length === 0 ? "Esta orden todavía no pide insumos." : "No falta ningún insumo."}</p>
           ) : (
             <ul className="flex flex-col gap-2">
-              {pending.map((l) => (
+              {pending.map(({ kind, supply: l }) => (
                 <li key={l.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-line bg-night/50 p-3">
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold text-ink">{l.name}</p>
@@ -115,6 +115,7 @@ export function RequiredSuppliesModal({ orderId, onClose }: { orderId: string; o
                       >
                         Ya está
                       </Button>
+                      {kind === "required" && (
                       <Button
                         size="sm"
                         variant="ghost"
@@ -126,6 +127,7 @@ export function RequiredSuppliesModal({ orderId, onClose }: { orderId: string; o
                           }
                         }}
                       />
+                      )}
                     </>
                   )}
                 </li>
@@ -138,7 +140,7 @@ export function RequiredSuppliesModal({ orderId, onClose }: { orderId: string; o
           <section>
             <h3 className="mb-2 font-display font-semibold text-ink">Ya están ({done.length})</h3>
             <ul className="flex flex-col gap-2">
-              {done.map((l) => (
+              {done.map(({ supply: l }) => (
                 <li key={l.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-done/30 bg-done/5 p-3">
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold text-ink">{l.name}</p>

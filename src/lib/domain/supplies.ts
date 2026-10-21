@@ -1,9 +1,14 @@
-import type { Order, OrderStatus, RequiredSupply } from "./schema";
+import type { Order, OrderStatus, RequiredSupply, SupplyLine } from "./schema";
 
 /** Órdenes que todavía esperan insumos; las entregadas, cerradas o canceladas ya no cuentan. */
 export const SUPPLY_ORDER_STATUSES: OrderStatus[] = ["recibida", "en_proceso", "terminada", "garantia"];
 
 export interface SupplyRow {
+  /**
+   * required = pedido con «Insumos requeridos» o compra suelta; cost = línea de
+   * «Insumos» que se anota al editar la orden (lleva proveedor y costo).
+   */
+  kind: "required" | "cost";
   /** null = compra suelta, sin orden. */
   orderId: string | null;
   folio: string | null;
@@ -32,7 +37,32 @@ export const normalizeSupplyText = (s: string) =>
 /** Misma clave = mismo insumo (ignora tildes, mayúsculas y espacios) en la misma unidad. */
 export const supplyKey = (s: Pick<RequiredSupply, "name" | "unit">) => `${normalizeSupplyText(s.name)}|${normalizeSupplyText(s.unit)}`;
 
-type OrderLike = Pick<Order, "id" | "folio" | "title" | "clientName" | "status" | "requiredSupplies">;
+type OrderLike = Pick<Order, "id" | "folio" | "title" | "clientName" | "status" | "requiredSupplies" | "createdAt"> & { supplies?: SupplyLine[] };
+
+/** A costed line from «Editar → Insumos» seen as a supply to obtain. */
+export function costLineAsSupply(line: SupplyLine, orderCreatedAt: string): RequiredSupply {
+  return {
+    id: line.id,
+    name: line.description,
+    quantity: line.quantity,
+    unit: "",
+    note: line.supplier ? `Proveedor: ${line.supplier}` : "",
+    status: line.status,
+    requestedAt: orderCreatedAt,
+    requestedBy: null,
+    obtainedAt: line.obtainedAt,
+    obtainedBy: line.obtainedBy,
+  };
+}
+
+/** Every supply line of one order (requeridos + los de «Editar»), pendientes primero. */
+export function orderSupplyLines(order: OrderLike): Array<{ kind: SupplyRow["kind"]; supply: RequiredSupply }> {
+  const lines = [
+    ...(order.requiredSupplies ?? []).map((supply) => ({ kind: "required" as const, supply })),
+    ...(order.supplies ?? []).map((l) => ({ kind: "cost" as const, supply: costLineAsSupply(l, order.createdAt) })),
+  ];
+  return lines.sort((a, b) => Number(a.supply.status !== "pendiente") - Number(b.supply.status !== "pendiente") || a.supply.requestedAt.localeCompare(b.supply.requestedAt));
+}
 
 /**
  * Filas del listado general. Cada fila es una línea de UNA orden (o una compra
@@ -43,16 +73,16 @@ type OrderLike = Pick<Order, "id" | "folio" | "title" | "clientName" | "status" 
 export function supplyRows(orders: OrderLike[], general: RequiredSupply[] = [], opts: { includeDone?: boolean } = {}): SupplyRow[] {
   const rows: SupplyRow[] = [];
   for (const o of orders) {
-    for (const supply of o.requiredSupplies ?? []) {
+    for (const { kind, supply } of orderSupplyLines(o)) {
       const pending = supply.status === "pendiente";
       if (pending && !SUPPLY_ORDER_STATUSES.includes(o.status)) continue;
       if (!pending && !opts.includeDone) continue;
-      rows.push({ orderId: o.id, folio: o.folio, orderTitle: o.title, clientName: o.clientName, supply });
+      rows.push({ kind, orderId: o.id, folio: o.folio, orderTitle: o.title, clientName: o.clientName, supply });
     }
   }
   for (const supply of general) {
     if (supply.status !== "pendiente" && !opts.includeDone) continue;
-    rows.push({ orderId: null, folio: null, orderTitle: null, clientName: null, supply });
+    rows.push({ kind: "required", orderId: null, folio: null, orderTitle: null, clientName: null, supply });
   }
   return rows.sort((a, b) => a.supply.requestedAt.localeCompare(b.supply.requestedAt));
 }

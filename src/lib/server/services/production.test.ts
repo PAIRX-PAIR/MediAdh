@@ -614,3 +614,40 @@ describe("compras sueltas", () => {
     expect((await db.read(["generalSupplies"])).generalSupplies.items.map((l) => l.name)).toEqual(["Nueva"]);
   });
 });
+
+describe("insumos anotados al editar la orden", () => {
+  it("salen en la lista de Insumos, se marcan «Ya está» y conservan el estado al editar", async () => {
+    const { admin } = await setup();
+    const { supplyRows } = await import("@/lib/domain/supplies");
+    const { order } = await orders.createOrder(
+      admin,
+      baseOrder({ supplies: [{ description: "Bronce latón 3/4", supplier: "Metales SA", quantity: 1, unitCost: 80_000 }] }),
+    );
+    let list = (await db.read(["orders"])).orders.items;
+    let rows = supplyRows(list);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ kind: "cost", folio: order.folio, supply: { name: "Bronce latón 3/4", status: "pendiente" } });
+    expect(rows[0]!.supply.note).toContain("Metales SA");
+
+    const lineId = order.supplies[0]!.id;
+    await orders.orderAction(admin, order.id, { action: "supplyDone", supplyId: lineId, done: true });
+    list = (await db.read(["orders"])).orders.items;
+    expect(supplyRows(list)).toHaveLength(0);
+    expect(list[0]!.supplies[0]).toMatchObject({ status: "conseguido", obtainedBy: "admin-1" });
+
+    // Editar la orden (mismo id) no los vuelve a pendientes y el costo sigue contando.
+    await orders.updateOrder(admin, order.id, { supplies: [{ id: lineId, description: "Bronce latón 3/4", supplier: "Metales SA", quantity: 2, unitCost: 80_000 }] });
+    list = (await db.read(["orders"])).orders.items;
+    expect(list[0]!.supplies[0]).toMatchObject({ status: "conseguido", quantity: 2 });
+    expect(supplyRows(list)).toHaveLength(0);
+    // Una línea nueva sí entra como pendiente.
+    await orders.updateOrder(admin, order.id, {
+      supplies: [
+        { id: lineId, description: "Bronce latón 3/4", supplier: "Metales SA", quantity: 2, unitCost: 80_000 },
+        { description: "Rodamiento 608", supplier: "", quantity: 4, unitCost: 5_000 },
+      ],
+    });
+    rows = supplyRows((await db.read(["orders"])).orders.items);
+    expect(rows.map((r) => r.supply.name)).toEqual(["Rodamiento 608"]);
+  });
+});
