@@ -518,3 +518,51 @@ describe("eliminar órdenes", () => {
     expect(list.items.some((o) => o.id === order.id)).toBe(false);
   });
 });
+
+describe("insumos requeridos por orden", () => {
+  const add = (admin: Principal, orderId: string, name: string, quantity: number, unit = "kg") =>
+    orders.orderAction(admin, orderId, { action: "supplyAdd", name, quantity, unit, note: null });
+
+  it("el mismo insumo en dos órdenes: «Ya está» solo cumple la orden donde se marcó", async () => {
+    const { admin } = await setup();
+    const { supplyRows, groupSupplies } = await import("@/lib/domain/supplies");
+    const a = (await orders.createOrder(admin, baseOrder({ title: "Eje A" }))).order;
+    const b = (await orders.createOrder(admin, baseOrder({ title: "Eje B" }))).order;
+    await add(admin, a.id, "Electrodo 6013", 2);
+    await add(admin, b.id, "  electrodo 6013 ", 3);
+
+    let list = (await db.read(["orders"])).orders.items;
+    const grouped = groupSupplies(supplyRows(list));
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0]).toMatchObject({ total: 5, unit: "kg" });
+    expect(grouped[0]!.rows.map((r) => r.folio)).toEqual([a.folio, b.folio]);
+
+    const lineA = list.find((o) => o.id === a.id)!.requiredSupplies[0]!;
+    const { order } = await orders.orderAction(admin, a.id, { action: "supplyDone", supplyId: lineA.id, done: true });
+    expect(order.requiredSupplies[0]).toMatchObject({ status: "conseguido", obtainedBy: "admin-1" });
+
+    list = (await db.read(["orders"])).orders.items;
+    expect(list.find((o) => o.id === b.id)!.requiredSupplies[0]).toMatchObject({ status: "pendiente", quantity: 3 });
+    // Sale del listado de pendientes, pero queda registrado en su orden.
+    expect(supplyRows(list).map((r) => r.folio)).toEqual([b.folio]);
+    expect(supplyRows(list, { includeDone: true })).toHaveLength(2);
+    expect(list.find((o) => o.id === a.id)!.requiredSupplies).toHaveLength(1);
+
+    // Deshacer la devuelve a pendientes.
+    await orders.orderAction(admin, a.id, { action: "supplyDone", supplyId: lineA.id, done: false });
+    list = (await db.read(["orders"])).orders.items;
+    expect(supplyRows(list)).toHaveLength(2);
+  });
+
+  it("no pide insumos de una orden cancelada o entregada, y valida el id", async () => {
+    const { admin } = await setup();
+    const { supplyRows } = await import("@/lib/domain/supplies");
+    const { order } = await orders.createOrder(admin, baseOrder());
+    await add(admin, order.id, "Lija", 10, "hojas");
+    await expect(orders.orderAction(admin, order.id, { action: "supplyRemove", supplyId: "no-existe" })).rejects.toMatchObject({ status: 404 });
+    await orders.orderAction(admin, order.id, { action: "deliver", satisfaction: null, finalPrice: null });
+    await expect(add(admin, order.id, "Otro", 1)).rejects.toMatchObject({ status: 409 });
+    // Una orden entregada ya no deja insumos pendientes en el listado general.
+    expect(supplyRows((await db.read(["orders"])).orders.items)).toHaveLength(0);
+  });
+});

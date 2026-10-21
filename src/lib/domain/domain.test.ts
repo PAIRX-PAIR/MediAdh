@@ -270,6 +270,7 @@ function order(over: Partial<Order> & Pick<Order, "id">): Order {
     due: null,
     workItems: [],
     supplies: [],
+    requiredSupplies: [],
     quoteId: null,
     price: null,
     finalPrice: null,

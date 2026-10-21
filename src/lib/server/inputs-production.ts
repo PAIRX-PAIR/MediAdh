@@ -140,6 +140,15 @@ export const orderActionInput = z.discriminatedUnion("action", [
   z.object({ action: z.literal("satisfaction"), value: satisfaction }),
   z.object({ action: z.literal("cancel"), reason: optionalText(300) }),
   z.object({ action: z.literal("reopen") }),
+  z.object({
+    action: z.literal("supplyAdd"),
+    name: requiredText(120),
+    quantity: z.number().gt(0).max(1_000_000),
+    unit: optionalText(24),
+    note: optionalText(300),
+  }),
+  z.object({ action: z.literal("supplyRemove"), supplyId: entityId }),
+  z.object({ action: z.literal("supplyDone"), supplyId: entityId, done: z.boolean() }),
 ]);
 
 export const historicalInput = z.object({
