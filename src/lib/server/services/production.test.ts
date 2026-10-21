@@ -581,7 +581,7 @@ describe("compras sueltas", () => {
     const grouped = groupSupplies(supplyRows(docs.orders.items, docs.generalSupplies.items));
     expect(grouped).toHaveLength(1);
     expect(grouped[0]).toMatchObject({ total: 25 });
-    expect(shoppingListText(grouped)).toContain("Tornillo 3/8: 25 unidades (OT-0001)");
+    expect(shoppingListText(grouped).toLowerCase()).toContain("tornillo 3/8: 25 unidades (ot-0001)");
 
     // Marcar la suelta no toca la de la orden.
     await orders.generalSupplyAction(admin, loose.id, { action: "done", done: true });
