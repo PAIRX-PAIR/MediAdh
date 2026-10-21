@@ -79,15 +79,25 @@ describe("bloqueo de cuenta y navegador de confianza", () => {
     await expect(login({ username: "dueno", password: "Clave-Segura-2026" }, ip())).rejects.toMatchObject({ status: 429 });
 
     // Cookie de confianza de OTRA cuenta: no sirve.
-    await setTrustCookie("owner-2");
+    await setTrustCookie("owner-2", 0);
     await expect(login({ username: "dueno", password: "Clave-Segura-2026" }, ip())).rejects.toMatchObject({ status: 429 });
 
     // La del dueño sí, pero la contraseña se sigue verificando.
-    await setTrustCookie("owner-1");
+    await setTrustCookie("owner-1", 0);
     await expect(login({ username: "dueno", password: "otra-clave-12345" }, ip())).rejects.toMatchObject({ status: 401 });
     const ok = await login({ username: "dueno", password: "Clave-Segura-2026" }, ip());
     expect(ok.user.id).toBe("owner-1");
     expect(ok.user.lockedUntil).toBeNull();
+  });
+
+  it("«cerrar sesión en todos» (sessionVersion) revoca también la cookie de confianza", async () => {
+    await seedUser("owner-1", "dueno");
+    await setTrustCookie("owner-1", 0);
+    for (let i = 0; i < 5; i++) await expect(login({ username: "dueno", password: `mala-clave-${i}xxxx` }, ip())).rejects.toMatchObject({ status: 401 });
+    await db.transact(["users"], "logout-all", ({ users }) => {
+      users.items[0]!.sessionVersion += 1;
+    });
+    await expect(login({ username: "dueno", password: "Clave-Segura-2026" }, ip())).rejects.toMatchObject({ status: 429 });
   });
 
   it("una cookie de confianza manipulada se ignora", async () => {

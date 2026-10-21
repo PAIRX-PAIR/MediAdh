@@ -108,7 +108,7 @@ export async function login(input: { username: string; password: string }, ip: s
     throw new HttpError(401, GENERIC_LOGIN_ERROR, "invalid_credentials");
   }
 
-  if (user.lockedUntil && new Date(user.lockedUntil).getTime() > Date.now() && !(await isTrustedFor(user.id))) {
+  if (user.lockedUntil && new Date(user.lockedUntil).getTime() > Date.now() && !(await isTrustedFor(user.id, user.sessionVersion))) {
     const minutes = Math.ceil((new Date(user.lockedUntil).getTime() - Date.now()) / 60_000);
     throw tooMany(minutes * 60, `Demasiados intentos fallidos. Intenta de nuevo en ${minutes} min.`);
   }

@@ -9,6 +9,6 @@ export const POST = route({ access: "public", manageSession: true }, async ({ re
   const input = await readJson(req, loginInput);
   const { token, user } = await login(input, clientIp(req.headers));
   await setSessionCookie(token);
-  await setTrustCookie(user.id);
+  await setTrustCookie(user.id, user.sessionVersion);
   return json({ ok: true, mustChangePassword: user.mustChangePassword });
 });
