@@ -56,7 +56,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: "/admin", label: "Mando", icon: Gauge, primary: true, group: "Producción", badge: (d) => d.alerts.filter((a) => a.level === "critical").length },
   { href: "/admin/ordenes", label: "Órdenes", icon: ClipboardList, primary: true, group: "Producción", badge: toInvoiceOrLate },
   { href: "/admin/cola", label: "Cola", icon: ListOrdered, primary: true, group: "Producción" },
-  { href: "/admin/insumos", label: "Insumos", icon: PackageSearch, group: "Producción", badge: (d) => pendingSupplyCount(d.production.orders ?? []) },
+  { href: "/admin/insumos", label: "Insumos", icon: PackageSearch, group: "Producción", badge: (d) => pendingSupplyCount(d.production.orders ?? [], d.production.generalSupplies ?? []) },
   { href: "/admin/cotizador", label: "Cotizador", icon: Calculator, group: "Producción", badge: (d) => (d.production.quotes ?? []).filter((q) => q.status === "enviada").length },
   { href: "/admin/clientes", label: "Clientes", icon: Building2, group: "Producción" },
   { href: "/admin/indicadores", label: "Indicadores", icon: BarChart3, group: "Producción" },

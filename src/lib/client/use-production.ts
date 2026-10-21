@@ -50,6 +50,7 @@ export function useProduction() {
       quotes: p.quotes ?? [],
       settings: p.settings,
       ipc: p.ipc ?? [],
+      generalSupplies: p.generalSupplies ?? [],
       schedule,
       occupancy: occupancy(schedule, machines, 14),
       ranking,

@@ -545,7 +545,7 @@ describe("insumos requeridos por orden", () => {
     expect(list.find((o) => o.id === b.id)!.requiredSupplies[0]).toMatchObject({ status: "pendiente", quantity: 3 });
     // Sale del listado de pendientes, pero queda registrado en su orden.
     expect(supplyRows(list).map((r) => r.folio)).toEqual([b.folio]);
-    expect(supplyRows(list, { includeDone: true })).toHaveLength(2);
+    expect(supplyRows(list, [], { includeDone: true })).toHaveLength(2);
     expect(list.find((o) => o.id === a.id)!.requiredSupplies).toHaveLength(1);
 
     // Deshacer la devuelve a pendientes.
@@ -564,5 +564,53 @@ describe("insumos requeridos por orden", () => {
     await expect(add(admin, order.id, "Otro", 1)).rejects.toMatchObject({ status: 409 });
     // Una orden entregada ya no deja insumos pendientes en el listado general.
     expect(supplyRows((await db.read(["orders"])).orders.items)).toHaveLength(0);
+  });
+});
+
+describe("compras sueltas", () => {
+  it("se piden sin orden, se enlazan a una orden y se marcan sin tocar las de las órdenes", async () => {
+    const { admin } = await setup();
+    const { supplyRows, groupSupplies, shoppingListText } = await import("@/lib/domain/supplies");
+    const { order } = await orders.createOrder(admin, baseOrder({ title: "Eje A" }));
+
+    // Suelta y también directa a la orden desde el mismo servicio.
+    const loose = (await orders.addSupply(admin, { orderId: null, name: "Tornillo 3/8", quantity: 20, unit: "unidades", note: null })).supply;
+    await orders.addSupply(admin, { orderId: order.id, name: "tornillo 3/8", quantity: 5, unit: "unidades", note: null });
+    let docs = await db.read(["orders", "generalSupplies"]);
+    expect(docs.generalSupplies.items).toHaveLength(1);
+    const grouped = groupSupplies(supplyRows(docs.orders.items, docs.generalSupplies.items));
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0]).toMatchObject({ total: 25 });
+    expect(shoppingListText(grouped)).toContain("Tornillo 3/8: 25 unidades (OT-0001)");
+
+    // Marcar la suelta no toca la de la orden.
+    await orders.generalSupplyAction(admin, loose.id, { action: "done", done: true });
+    docs = await db.read(["orders", "generalSupplies"]);
+    expect(supplyRows(docs.orders.items, docs.generalSupplies.items)).toHaveLength(1);
+    await orders.generalSupplyAction(admin, loose.id, { action: "done", done: false });
+
+    // Enlazarla: sale de las sueltas y queda como insumo requerido de la orden.
+    await orders.generalSupplyAction(admin, loose.id, { action: "link", orderId: order.id });
+    docs = await db.read(["orders", "generalSupplies"]);
+    expect(docs.generalSupplies.items).toHaveLength(0);
+    expect(docs.orders.items[0]!.requiredSupplies.map((s) => s.quantity)).toEqual([5, 20]);
+
+    await expect(orders.generalSupplyAction(admin, loose.id, { action: "remove" })).rejects.toMatchObject({ status: 404 });
+    await expect(orders.addSupply(admin, { orderId: "no-existe", name: "X", quantity: 1, unit: null, note: null })).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("quita una compra suelta y borra las conseguidas hace mucho", async () => {
+    const { admin } = await setup();
+    const a = (await orders.addSupply(admin, { orderId: null, name: "Lija", quantity: 1, unit: null, note: null })).supply;
+    const old = (await orders.addSupply(admin, { orderId: null, name: "Vieja", quantity: 1, unit: null, note: null })).supply;
+    await orders.generalSupplyAction(admin, old.id, { action: "done", done: true });
+    await db.transact(["generalSupplies"], "envejece", ({ generalSupplies }) => {
+      generalSupplies.items.find((l) => l.id === old.id)!.obtainedAt = "2020-01-01T00:00:00.000Z";
+    });
+    await orders.addSupply(admin, { orderId: null, name: "Nueva", quantity: 1, unit: null, note: null });
+    const { generalSupplies } = await db.read(["generalSupplies"]);
+    expect(generalSupplies.items.map((l) => l.name)).toEqual(["Lija", "Nueva"]);
+    await orders.generalSupplyAction(admin, a.id, { action: "remove" });
+    expect((await db.read(["generalSupplies"])).generalSupplies.items.map((l) => l.name)).toEqual(["Nueva"]);
   });
 });

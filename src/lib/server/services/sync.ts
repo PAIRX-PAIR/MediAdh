@@ -44,7 +44,7 @@ export async function buildSync(principal: Principal): Promise<SyncPayload> {
     "machines",
     "orders",
     "attachments",
-    ...(principal.isAdmin ? (["quotes", "clients", "ipc"] as const) : []),
+    ...(principal.isAdmin ? (["quotes", "clients", "ipc", "generalSupplies"] as const) : []),
   ]);
   const { today, isAdmin, user } = principal;
   const now = new Date();
@@ -256,7 +256,7 @@ const strip = <T extends { history: unknown }>({ history: _h, ...rest }: T): Omi
 /** Live production data: admins get the working set, workers only what their tasks need. */
 function buildProduction(
   principal: Principal,
-  docs: Pick<Database, "settings" | "orders" | "machines" | "attachments"> & Partial<Pick<Database, "quotes" | "clients" | "ipc">>,
+  docs: Pick<Database, "settings" | "orders" | "machines" | "attachments"> & Partial<Pick<Database, "quotes" | "clients" | "ipc" | "generalSupplies">>,
   tasks: Task[],
 ): ProductionPayload {
   const { schedule, skipHolidays } = docs.settings.production;
@@ -293,6 +293,7 @@ function buildProduction(
       quotes,
       clients: (docs.clients?.items ?? []).map(strip),
       ipc: docs.ipc?.items ?? [],
+      generalSupplies: docs.generalSupplies?.items ?? [],
       attachments: docs.attachments.items.filter((a) => (a.orderId && visible.has(a.orderId)) || (a.quoteId && visible.has(a.quoteId))).map(viewOf),
     };
   }
