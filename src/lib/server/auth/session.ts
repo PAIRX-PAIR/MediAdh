@@ -88,8 +88,9 @@ export const TRUST_COOKIE = isProduction ? "__Host-smi_trust" : "smi_trust";
 const TRUST_DAYS = 90;
 const TRUST_AUDIENCE = "smi-taller-trust";
 
-export async function setTrustCookie(userId: string) {
-  const token = await new SignJWT({})
+/** Bound to the account's sessionVersion: "cerrar sesión en todos" or a password change revokes it too. */
+export async function setTrustCookie(userId: string, sessionVersion: number) {
+  const token = await new SignJWT({ sv: sessionVersion })
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
     .setSubject(userId)
     .setIssuer(ISSUER)
@@ -101,12 +102,12 @@ export async function setTrustCookie(userId: string) {
   store.set(TRUST_COOKIE, token, { httpOnly: true, secure: isProduction, sameSite: "lax", path: "/", maxAge: TRUST_DAYS * 24 * 3600 });
 }
 
-export async function isTrustedFor(userId: string): Promise<boolean> {
+export async function isTrustedFor(userId: string, sessionVersion: number): Promise<boolean> {
   try {
     const raw = (await cookies()).get(TRUST_COOKIE)?.value;
     if (!raw) return false;
     const { payload } = await jwtVerify(raw, sessionSecret(), { algorithms: ["HS256"], issuer: ISSUER, audience: TRUST_AUDIENCE });
-    return payload.sub === userId;
+    return payload.sub === userId && payload.sv === sessionVersion;
   } catch {
     // No request context (tests) or an invalid cookie.
     return false;
