@@ -12,6 +12,8 @@ interface RouteOptions {
   access: Access;
   /** Allowed while the account must still change its password / accept the policy. */
   allowIncomplete?: boolean;
+  /** The route sets or clears the session cookie itself: skip the sliding re-issue, which would overwrite it. */
+  manageSession?: boolean;
 }
 
 type Ctx<A extends Access> = {
@@ -52,7 +54,7 @@ export function route<A extends Access>(
       const response = await handler({ req, params, principal } as Ctx<A>);
 
       // Sliding session: re-issue long-lived tokens while the user is active.
-      if (principal && shouldRenew(principal.claims)) {
+      if (principal && !options.manageSession && shouldRenew(principal.claims)) {
         await setSessionCookie(await createSessionToken(principal.user.id, principal.user.sessionVersion));
       }
       return response;
