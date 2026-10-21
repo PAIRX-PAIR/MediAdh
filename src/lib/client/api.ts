@@ -1,6 +1,7 @@
 "use client";
 
 import type {
+  RequiredSupply,
   Attendance,
   AttachmentKind,
   ClaimKind,
@@ -447,6 +448,13 @@ export const api = {
     action: (id: string, input: QuoteActionInput) =>
       request<{ quote: Quote; order?: Order }>(`/api/admin/quotes/${encodeURIComponent(id)}/action`, { method: "POST", body: input }),
     remove: (id: string) => request<{ ok: true }>(`/api/admin/quotes/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  },
+
+  supplies: {
+    add: (input: { orderId: string | null; name: string; quantity: number; unit: string | null; note: string | null }) =>
+      request<{ supply: RequiredSupply; order: Order | null }>("/api/admin/supplies", { method: "POST", body: input }),
+    action: (id: string, input: { action: "done"; done: boolean } | { action: "remove" } | { action: "link"; orderId: string }) =>
+      request<{ supply: RequiredSupply | null; order: Order | null }>(`/api/admin/supplies/${encodeURIComponent(id)}`, { method: "POST", body: input }),
   },
 
   ipc: {

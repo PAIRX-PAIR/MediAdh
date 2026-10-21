@@ -21,6 +21,7 @@ import type {
   TaskPriority,
   WorkItem,
 } from "@/lib/domain/schema";
+import { RETENTION } from "@/lib/domain/schema";
 import { addDays, daysBetween, isRealDate, zonedInstant } from "@/lib/domain/time";
 import { isOwner, type Principal } from "../auth/principal";
 import { badRequest, conflict, forbidden, notFound } from "../http";
@@ -502,6 +503,98 @@ function applySupplyAction(order: Order, actor: Actor, input: Extract<OrderActio
   track(order, actor, input.done ? "Ya está el insumo" : "Volvió a pedir un insumo", [
     { field: "requiredSupplies", label: line.name, from: input.done ? "Pendiente" : "Conseguido", to: input.done ? "Conseguido" : "Pendiente" },
   ]);
+}
+
+/* ─────────────────── Compras sueltas (insumos sin orden) ─────────────────── */
+
+const SUPPLY_DOCS: Array<keyof Database> = ["orders", "generalSupplies", "audit"];
+
+export interface NewSupplyInput {
+  /** null = compra suelta; con id, el insumo queda enlazado a esa orden. */
+  orderId: string | null;
+  name: string;
+  quantity: number;
+  unit: string | null;
+  note: string | null;
+}
+
+export type GeneralSupplyAction = { action: "done"; done: boolean } | { action: "remove" } | { action: "link"; orderId: string };
+
+function describeSupply(line: Pick<RequiredSupply, "name" | "quantity" | "unit">) {
+  return `${line.name} · ${line.quantity}${line.unit ? ` ${line.unit}` : ""}`;
+}
+
+/** Drops old, already-obtained loose purchases so the document stays small. */
+function pruneGeneralSupplies(list: Collection<RequiredSupply>, nowMs: number) {
+  const cutoff = nowMs - RETENTION.generalSuppliesDoneDays * 86_400_000;
+  list.items = list.items.filter((l) => l.status === "pendiente" || !l.obtainedAt || Date.parse(l.obtainedAt) >= cutoff);
+}
+
+/** A loose purchase, or — with `orderId` — the same as «Insumos requeridos» inside that order. */
+export async function addSupply(principal: Principal, input: NewSupplyInput) {
+  return getDb().transact(SUPPLY_DOCS, "Agrega un insumo por conseguir", (docs) => {
+    const actor = actorOf(principal);
+    const now = nowIso();
+    if (input.orderId) {
+      const order = findOrder(docs.orders, input.orderId);
+      if (!SUPPLY_STATUSES.includes(order.status)) throw conflict("Esa orden ya no está en curso: no admite insumos nuevos.");
+      applySupplyAction(order, actor, { action: "supplyAdd", name: input.name, quantity: input.quantity, unit: input.unit, note: input.note }, now);
+      order.updatedAt = now;
+      order.updatedBy = principal.user.id;
+      audit(docs.audit, actor, "insumo_pedido", order.folio, describeSupply(order.requiredSupplies.at(-1)!));
+      return { supply: order.requiredSupplies.at(-1)!, order };
+    }
+    const line: RequiredSupply = {
+      id: newId(),
+      name: input.name.trim(),
+      quantity: input.quantity,
+      unit: input.unit?.trim() ?? "",
+      note: input.note?.trim() ?? "",
+      status: "pendiente",
+      requestedAt: now,
+      requestedBy: actor.id,
+      obtainedAt: null,
+      obtainedBy: null,
+    };
+    docs.generalSupplies.items.push(line);
+    pruneGeneralSupplies(docs.generalSupplies, Date.now());
+    audit(docs.audit, actor, "insumo_pedido", null, describeSupply(line));
+    return { supply: line, order: null };
+  });
+}
+
+/** Mark, remove or link (move into an order) a loose purchase. */
+export async function generalSupplyAction(principal: Principal, id: string, input: GeneralSupplyAction) {
+  return getDb().transact(SUPPLY_DOCS, "Acción sobre un insumo suelto", (docs) => {
+    const actor = actorOf(principal);
+    const now = nowIso();
+    const line = docs.generalSupplies.items.find((l) => l.id === id);
+    if (!line) throw notFound("Ese insumo ya no está en la lista general.");
+    if (input.action === "remove") {
+      docs.generalSupplies.items = docs.generalSupplies.items.filter((l) => l.id !== id);
+      audit(docs.audit, actor, "insumo_quitado", null, describeSupply(line));
+      return { supply: null, order: null };
+    }
+    if (input.action === "done") {
+      if ((line.status === "conseguido") !== input.done) {
+        line.status = input.done ? "conseguido" : "pendiente";
+        line.obtainedAt = input.done ? now : null;
+        line.obtainedBy = input.done ? actor.id : null;
+        audit(docs.audit, actor, input.done ? "insumo_conseguido" : "insumo_pendiente", null, describeSupply(line));
+      }
+      return { supply: line, order: null };
+    }
+    // link: the line moves into the order and stops being a loose purchase.
+    const order = findOrder(docs.orders, input.orderId);
+    if (!SUPPLY_STATUSES.includes(order.status)) throw conflict("Esa orden ya no está en curso: no admite insumos nuevos.");
+    docs.generalSupplies.items = docs.generalSupplies.items.filter((l) => l.id !== id);
+    order.requiredSupplies.push(line);
+    order.updatedAt = now;
+    order.updatedBy = principal.user.id;
+    track(order, actor, "Enlazó un insumo de la lista general", [{ field: "requiredSupplies", label: "Insumo requerido", from: null, to: describeSupply(line) }]);
+    audit(docs.audit, actor, "insumo_enlazado", order.folio, describeSupply(line));
+    return { supply: line, order };
+  });
 }
 
 export async function orderAction(principal: Principal, id: string, input: OrderAction) {

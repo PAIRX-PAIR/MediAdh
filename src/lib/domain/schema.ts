@@ -804,6 +804,8 @@ export const COLLECTIONS = {
   attendance: collectionSchema(attendanceSchema),
   devices: collectionSchema(deviceSchema),
   payAdjustments: collectionSchema(payAdjustmentSchema),
+  /** Insumos por comprar que no están (todavía) enlazados a una orden. */
+  generalSupplies: collectionSchema(requiredSupplySchema),
 } as const;
 
 export type CollectionName = keyof typeof COLLECTIONS;
@@ -828,6 +830,7 @@ export interface Database {
   attendance: Collection<Attendance>;
   devices: Collection<Device>;
   payAdjustments: Collection<PayAdjustment>;
+  generalSupplies: Collection<RequiredSupply>;
 }
 
 export type DocName = keyof Database;
@@ -865,6 +868,7 @@ export const DOC_LAYOUT: Record<DocName, DocLayout> = {
   attendance: { kind: "sharded", dir: "asistencia" },
   devices: { kind: "single" },
   payAdjustments: { kind: "single" },
+  generalSupplies: { kind: "single" },
 };
 
 export const DOC_NAMES = Object.keys(DOC_LAYOUT) as DocName[];
@@ -879,4 +883,6 @@ export const RETENTION = {
   completedTaskDays: 120,
   /** Change-log entries kept inside each entity. */
   entityHistory: 60,
+  /** Compras sueltas ya conseguidas se borran pasado este plazo. */
+  generalSuppliesDoneDays: 60,
 } as const;

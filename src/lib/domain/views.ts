@@ -5,6 +5,7 @@ import type {
   IpcEntry,
   Machine,
   Order,
+  RequiredSupply,
   ProductionSettings,
   Quote,
   Announcement,
@@ -156,6 +157,8 @@ export interface ProductionPayload {
   quotes?: QuoteView[];
   clients?: ClientView[];
   ipc?: IpcEntry[];
+  /** Admin: compras sueltas (insumos sin orden). */
+  generalSupplies?: RequiredSupply[];
   /** Worker: orders behind their tasks. */
   briefs?: OrderBrief[];
   attachments: AttachmentView[];

@@ -236,3 +236,17 @@ export const ipcInput = z.object({
   remove: z.array(month).max(600).default([]),
 });
 
+
+export const supplyCreateInput = z.object({
+  orderId: nullableId.default(null),
+  name: requiredText(120),
+  quantity: z.number().gt(0).max(1_000_000),
+  unit: optionalText(24),
+  note: optionalText(300),
+});
+
+export const generalSupplyActionInput = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("done"), done: z.boolean() }),
+  z.object({ action: z.literal("remove") }),
+  z.object({ action: z.literal("link"), orderId: entityId }),
+]);
