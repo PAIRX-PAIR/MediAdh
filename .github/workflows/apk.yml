@@ -97,7 +97,7 @@ jobs:
           cp twa/app-release-signed.apk twa/smi-procesos.apk
           gh release create "android-v${VERSION_NAME}-${VERSION_CODE}" twa/smi-procesos.apk             --title "App Android ${VERSION_NAME}"             --notes "APK firmado de Procesos productivos S.M.I. Se descarga desde la página de inicio de la app."             --target "${GITHUB_SHA}" --latest
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: smi-procesos-${{ inputs.version_name }}
           path: |
