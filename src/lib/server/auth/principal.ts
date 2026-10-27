@@ -16,6 +16,11 @@ export interface Principal {
   claims: SessionClaims;
   /** Account still has to set its own password or accept the data policy. */
   incomplete: boolean;
+  /**
+   * Gerencia admin viewing the app as `user` ("entrar como"): the session is
+   * read-only and every write is refused by `route()`. null = a normal session.
+   */
+  impersonator: { id: string; displayName: string } | null;
 }
 
 export type PrincipalResult =
@@ -43,7 +48,20 @@ export async function resolvePrincipal(): Promise<PrincipalResult> {
   if (!user || user.sessionVersion !== claims.sv) return { status: "anonymous" };
 
   const today = todayIn(settings.timezone);
-  const access = evaluateAccess(user, positions.items, today, { staffLogin: settings.staffLogin });
+
+  // "Entrar como": the real admin is re-validated on every request, so
+  // disabling them, demoting them or signing them out ends it immediately.
+  let impersonator: Principal["impersonator"] = null;
+  if (claims.act) {
+    const actor = users.items.find((u) => u.id === claims.act!.sub);
+    if (!actor || actor.id === user.id || actor.sessionVersion !== claims.act.sv) return { status: "anonymous" };
+    const actorAccess = evaluateAccess(actor, positions.items, today, { staffLogin: settings.staffLogin });
+    if (!actorAccess.ok || !isOwner(actorAccess)) return { status: "anonymous" };
+    impersonator = { id: actor.id, displayName: actor.displayName };
+  }
+
+  // Operarios may not sign in themselves (tablero only), but an admin can still look at their view.
+  const access = evaluateAccess(user, positions.items, today, { staffLogin: impersonator ? true : settings.staffLogin });
   if (!access.ok) return { status: "denied", reason: access.reason, startDate: access.startDate };
 
   return {
@@ -57,6 +75,7 @@ export async function resolvePrincipal(): Promise<PrincipalResult> {
       today,
       claims,
       incomplete: isIncomplete(user, settings),
+      impersonator,
     },
   };
 }

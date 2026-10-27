@@ -36,6 +36,8 @@ export interface MeView {
   area: string | null;
   contractEndDate: string | null;
   contractStatus: ContractStatus | null;
+  /** Gerencia admin viewing the app as this user (read-only); null = own session. */
+  impersonator: { id: string; displayName: string } | null;
 }
 
 export interface PositionView {

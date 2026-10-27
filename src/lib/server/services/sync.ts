@@ -174,6 +174,7 @@ export async function buildSync(principal: Principal): Promise<SyncPayload> {
       area: position?.area ?? null,
       contractEndDate: position?.contract?.endDate ?? null,
       contractStatus: position ? contractStatus(position.contract, today) : null,
+      impersonator: principal.impersonator,
     },
     settings: settingsView(docs.settings),
     positions,

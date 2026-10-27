@@ -305,6 +305,9 @@ export const api = {
       request<{ ok: true; mustChangePassword: boolean }>("/api/auth/login", { method: "POST", body: { username, password } }),
     logout: () => request<{ ok: true }>("/api/auth/logout", { method: "POST", body: {} }),
     logoutEverywhere: () => request<{ ok: true }>("/api/auth/logout-all", { method: "POST", body: {} }),
+    /** Gerencia: open the app as another user (read-only). */
+    impersonate: (userId: string) => request<{ ok: true; home: string }>("/api/admin/entrar-como", { method: "POST", body: { userId } }),
+    stopImpersonating: () => request<{ ok: true }>("/api/auth/volver", { method: "POST", body: {} }),
     register: (input: {
       displayName: string;
       username: string;
