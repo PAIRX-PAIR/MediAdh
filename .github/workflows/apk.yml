@@ -43,7 +43,7 @@ jobs:
           packages: "platform-tools"
           log-accepted-android-sdk-licenses: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
 
