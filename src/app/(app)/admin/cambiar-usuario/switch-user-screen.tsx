@@ -69,7 +69,7 @@ export function SwitchUserScreen() {
   return (
     <>
       <PageHeader
-        eyebrow="Sistema"
+        eyebrow="Usuarios"
         title="Cambiar de usuario"
         description="Entra como otra persona para ver la app tal como la ve. Es solo lectura, dura máximo 2 horas y queda registrado en Auditoría. Arriba aparece el botón para volver a tu cuenta."
       />

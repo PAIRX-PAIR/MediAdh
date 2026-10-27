@@ -35,7 +35,7 @@ export interface NavItem {
   /** Shown in the bottom task bar on phones (max 5). */
   primary?: boolean;
   /** Sidebar section. */
-  group?: "Producción" | "Equipo" | "Sistema" | "Mi trabajo";
+  group?: "Producción" | "Equipo" | "Usuarios" | "Sistema" | "Mi trabajo";
   /** Only gerencia y administración (scope total). */
   owner?: boolean;
   /** Only these usernames (on top of the role checks). */
@@ -82,9 +82,9 @@ export const ADMIN_NAV: NavItem[] = [
   { href: "/admin/nomina", label: "Nómina", icon: Wallet, group: "Equipo" },
   { href: "/admin/dispositivos", label: "Accesos QR", icon: QrCode, group: "Equipo" },
   { href: "/admin/avisos", label: "Avisos", icon: Megaphone, group: "Equipo" },
+  { href: "/admin/cambiar-usuario", label: "Cambiar de usuario", icon: UserRoundCog, owner: true, group: "Usuarios" },
   { href: "/admin/ajustes", label: "Ajustes", icon: Settings, owner: true, group: "Sistema" },
   { href: "/admin/auditoria", label: "Auditoría", icon: ShieldCheck, owner: true, group: "Sistema" },
-  { href: "/admin/cambiar-usuario", label: "Cambiar de usuario", icon: UserRoundCog, owner: true, group: "Sistema" },
   { href: "/perfil", label: "Perfil", icon: UserRound, group: "Sistema" },
 ];
 
