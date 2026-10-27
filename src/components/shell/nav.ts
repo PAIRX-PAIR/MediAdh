@@ -9,6 +9,7 @@ import {
   FileClock,
   Gauge,
   ListOrdered,
+  Map as MapIcon,
   Megaphone,
   PackageSearch,
   PiggyBank,
@@ -17,12 +18,14 @@ import {
   Settings,
   ShieldCheck,
   UserRound,
+  UserRoundCog,
   Users,
   Wallet,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { pendingSupplyCount } from "@/lib/domain/supplies";
+import { TASK_MAP_USERS } from "@/lib/domain/task-map";
 import type { SyncPayload } from "@/lib/domain/views";
 
 export interface NavItem {
@@ -35,6 +38,8 @@ export interface NavItem {
   group?: "Producción" | "Equipo" | "Sistema" | "Mi trabajo";
   /** Only gerencia y administración (scope total). */
   owner?: boolean;
+  /** Only these usernames (on top of the role checks). */
+  users?: string[];
   badge?: (data: SyncPayload) => number;
 }
 
@@ -56,6 +61,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: "/admin", label: "Mando", icon: Gauge, primary: true, group: "Producción", badge: (d) => d.alerts.filter((a) => a.level === "critical").length },
   { href: "/admin/ordenes", label: "Órdenes", icon: ClipboardList, primary: true, group: "Producción", badge: toInvoiceOrLate },
   { href: "/admin/cola", label: "Cola", icon: ListOrdered, primary: true, group: "Producción" },
+  { href: "/admin/mapa", label: "Mapa de tareas", icon: MapIcon, group: "Producción", users: TASK_MAP_USERS },
   { href: "/admin/insumos", label: "Insumos", icon: PackageSearch, group: "Producción", badge: (d) => pendingSupplyCount(d.production.orders ?? [], d.production.generalSupplies ?? []) },
   { href: "/admin/cotizador", label: "Cotizador", icon: Calculator, group: "Producción", badge: (d) => (d.production.quotes ?? []).filter((q) => q.status === "enviada").length },
   { href: "/admin/clientes", label: "Clientes", icon: Building2, group: "Producción" },
@@ -78,6 +84,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: "/admin/avisos", label: "Avisos", icon: Megaphone, group: "Equipo" },
   { href: "/admin/ajustes", label: "Ajustes", icon: Settings, owner: true, group: "Sistema" },
   { href: "/admin/auditoria", label: "Auditoría", icon: ShieldCheck, owner: true, group: "Sistema" },
+  { href: "/admin/cambiar-usuario", label: "Cambiar de usuario", icon: UserRoundCog, owner: true, group: "Sistema" },
   { href: "/perfil", label: "Perfil", icon: UserRound, group: "Sistema" },
 ];
 

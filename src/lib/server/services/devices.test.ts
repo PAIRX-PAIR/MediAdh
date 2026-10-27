@@ -37,6 +37,7 @@ async function admin(): Promise<Principal> {
     today: todayIn(settings.timezone),
     claims: { sub: "admin-1", sv: 0, iat: 0, exp: 0 },
     incomplete: false,
+    impersonator: null,
   };
 }
 

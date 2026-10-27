@@ -14,6 +14,7 @@ import { shiftsOn } from "@/lib/domain/calendar";
 import { timeAgo } from "@/lib/domain/labels";
 import type { NotificationView } from "@/lib/domain/views";
 import { BrandMark } from "./brand-mark";
+import { ImpersonationBar } from "./impersonation-bar";
 import { ADMIN_NAV, ADMIN_WORKER_EXTRAS, WORKER_NAV, type NavItem } from "./nav";
 import { ProfileGate } from "./profile-gate";
 import { WorkdayClock } from "./workday-clock";
@@ -28,14 +29,17 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const nav = useMemo<NavItem[]>(() => {
     if (!data.me.isAdmin) return WORKER_NAV;
-    const admin = data.me.scope === "total" ? ADMIN_NAV : ADMIN_NAV.filter((item) => !item.owner);
+    const admin = (data.me.scope === "total" ? ADMIN_NAV : ADMIN_NAV.filter((item) => !item.owner)).filter(
+      (item) => !item.users || item.users.includes(data.me.username),
+    );
     return data.me.positionId ? [...admin, ...ADMIN_WORKER_EXTRAS] : admin;
-  }, [data.me.isAdmin, data.me.positionId, data.me.scope]);
+  }, [data.me.isAdmin, data.me.positionId, data.me.scope, data.me.username]);
 
   if (data.me.mustChangePassword || data.me.needsConsent) {
     return (
       <>
         <PwaBridge />
+        <ImpersonationBar />
         <ProfileGate />
       </>
     );
@@ -47,6 +51,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col">
       <PwaBridge />
+      <ImpersonationBar />
       <TopBar onBell={() => setDrawer(true)} onMenu={() => setMenuOpenedAt(pathname)} />
       <AnnouncementTicker />
       {data.demo && (

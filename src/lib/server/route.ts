@@ -14,6 +14,8 @@ interface RouteOptions {
   allowIncomplete?: boolean;
   /** The route sets or clears the session cookie itself: skip the sliding re-issue, which would overwrite it. */
   manageSession?: boolean;
+  /** Writes allowed while an admin is "entrando como" someone else (only leaving / signing out). */
+  allowImpersonated?: boolean;
 }
 
 type Ctx<A extends Access> = {
@@ -38,6 +40,11 @@ export function route<A extends Access>(
       let principal: Principal | null = null;
       if (result.status === "ok") principal = result.principal;
 
+      // "Entrar como" is look-only: nothing can be created, changed or deleted in someone else's name.
+      if (principal?.impersonator && req.method !== "GET" && req.method !== "HEAD" && !options.allowImpersonated) {
+        throw new HttpError(403, `Estás viendo la app como ${principal.user.displayName}: es solo lectura. Vuelve a tu cuenta para hacer cambios.`, "impersonation_read_only");
+      }
+
       if (options.access !== "public") {
         if (result.status === "denied") throw new HttpError(403, ACCESS_DENIAL_MESSAGES[result.reason], `access_${result.reason}`);
         if (!principal) throw unauthorized();
@@ -54,7 +61,7 @@ export function route<A extends Access>(
       const response = await handler({ req, params, principal } as Ctx<A>);
 
       // Sliding session: re-issue long-lived tokens while the user is active.
-      if (principal && !options.manageSession && shouldRenew(principal.claims)) {
+      if (principal && !principal.impersonator && !options.manageSession && shouldRenew(principal.claims)) {
         await setSessionCookie(await createSessionToken(principal.user.id, principal.user.sessionVersion));
       }
       return response;

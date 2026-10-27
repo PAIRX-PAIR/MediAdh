@@ -43,6 +43,7 @@ async function principalFor(username: string): Promise<Principal> {
     today,
     claims: { sub: user.id, sv: user.sessionVersion, iat: 0, exp: 0 },
     incomplete: false,
+    impersonator: null,
   };
 }
 

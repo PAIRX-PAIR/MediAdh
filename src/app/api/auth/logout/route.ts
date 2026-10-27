@@ -2,7 +2,7 @@ import { clearSessionCookie } from "@/lib/server/auth/session";
 import { json } from "@/lib/server/http";
 import { route } from "@/lib/server/route";
 
-export const POST = route({ access: "public", manageSession: true }, async () => {
+export const POST = route({ access: "public", manageSession: true, allowImpersonated: true }, async () => {
   await clearSessionCookie();
   return json({ ok: true });
 });

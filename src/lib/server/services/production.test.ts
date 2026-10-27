@@ -35,7 +35,7 @@ async function principalFor(username: string): Promise<Principal> {
   const today = todayIn(settings.timezone);
   const access = evaluateAccess(user, positions.items, today);
   if (!access.ok) throw new Error(`no access: ${access.reason}`);
-  return { user, position: access.position, isAdmin: access.isAdmin, scope: access.scope, settings, today, claims: { sub: user.id, sv: 0, iat: 0, exp: 0 }, incomplete: false };
+  return { user, position: access.position, isAdmin: access.isAdmin, scope: access.scope, settings, today, claims: { sub: user.id, sv: 0, iat: 0, exp: 0 }, incomplete: false, impersonator: null };
 }
 
 async function setup() {
