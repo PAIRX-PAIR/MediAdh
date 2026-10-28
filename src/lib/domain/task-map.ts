@@ -4,11 +4,6 @@ import type { Machine, Order, Process, WorkItem } from "./schema";
 import { orderSupplyLines } from "./supplies";
 import { daysBetween, dateInZone } from "./time";
 
-/** Usernames that see «Mapa de tareas» in the menu (a gerencia admin can still look at it via «Cambiar de usuario»). */
-export const TASK_MAP_USERS = ["edwin.enriquez"];
-
-export const canSeeTaskMap = (username: string) => TASK_MAP_USERS.includes(username);
-
 /** Rojo = urgente, amarillo = alta, azul = programado (con tiempo). */
 export type MapPriority = "urgente" | "alta" | "programado";
 export type MapStatus = "en_cola" | "en_proceso" | "bloqueada" | "material";
