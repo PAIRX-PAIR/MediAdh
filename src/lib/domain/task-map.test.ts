@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Order, WorkItem } from "./schema";
-import { canSeeTaskMap, mapPriority, taskMapRows } from "./task-map";
+import { mapPriority, taskMapRows } from "./task-map";
 
 const TODAY = "2026-10-27";
 const TZ = "America/Bogota";
@@ -63,8 +63,4 @@ describe("mapa de tareas", () => {
     expect(rows.map((r) => r.status)).toEqual(["material", "en_proceso"]);
   });
 
-  it("solo los usuarios habilitados lo ven en el menú", () => {
-    expect(canSeeTaskMap("edwin.enriquez")).toBe(true);
-    expect(canSeeTaskMap("alejandra.urrea")).toBe(false);
-  });
 });

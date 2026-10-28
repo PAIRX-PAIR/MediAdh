@@ -29,11 +29,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const nav = useMemo<NavItem[]>(() => {
     if (!data.me.isAdmin) return WORKER_NAV;
-    const admin = (data.me.scope === "total" ? ADMIN_NAV : ADMIN_NAV.filter((item) => !item.owner)).filter(
-      (item) => !item.users || item.users.includes(data.me.username),
-    );
+    const admin = data.me.scope === "total" ? ADMIN_NAV : ADMIN_NAV.filter((item) => !item.owner);
     return data.me.positionId ? [...admin, ...ADMIN_WORKER_EXTRAS] : admin;
-  }, [data.me.isAdmin, data.me.positionId, data.me.scope, data.me.username]);
+  }, [data.me.isAdmin, data.me.positionId, data.me.scope]);
 
   if (data.me.mustChangePassword || data.me.needsConsent) {
     return (
