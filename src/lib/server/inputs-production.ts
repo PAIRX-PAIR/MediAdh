@@ -132,9 +132,10 @@ export const orderPatchInput = z
 
 export const orderActionInput = z.discriminatedUnion("action", [
   z.object({ action: z.literal("status"), to: z.enum(ORDER_STATUSES) }),
-  z.object({ action: z.literal("deliver"), satisfaction: satisfaction.default(null), finalPrice: z.union([money, z.null()]).default(null) }),
+  z.object({ action: z.literal("deliver"), satisfaction: satisfaction.default(null), finalPrice: z.union([money, z.null()]).default(null), noInvoice: z.boolean().optional() }),
   z.object({ action: z.literal("close") }),
   z.object({ action: z.literal("invoice"), number: optionalText(40) }),
+  z.object({ action: z.literal("noInvoice"), none: z.boolean() }),
   z.object({ action: z.literal("claim"), kind: z.enum(CLAIM_KINDS), description: requiredText(500) }),
   z.object({ action: z.literal("resolveClaim"), claimId: entityId, resolution: requiredText(500) }),
   z.object({ action: z.literal("satisfaction"), value: satisfaction }),

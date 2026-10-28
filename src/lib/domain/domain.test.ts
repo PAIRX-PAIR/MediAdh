@@ -278,7 +278,7 @@ function order(over: Partial<Order> & Pick<Order, "id">): Order {
     finishedAt: null,
     deliveredAt: null,
     closedAt: null,
-    invoice: { pending: false, number: null, invoicedAt: null },
+    invoice: { pending: false, number: null, invoicedAt: null, none: false },
     claims: [],
     satisfaction: null,
     reminders: { before24h: false, dayOf: false, overdue: false },

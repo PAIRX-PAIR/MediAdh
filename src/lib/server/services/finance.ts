@@ -29,9 +29,12 @@ export async function financeReport(principal: Principal, monthParam: string | n
       price: o.finalPrice ?? o.price ?? 0,
       supplies: Math.round(o.supplies.reduce((s, l) => s + l.quantity * l.unitCost, 0)),
       invoiced: !o.invoice.pending && Boolean(o.invoice.number || o.invoice.invoicedAt),
+      /** facturada · pendiente (falta facturar) · sin_factura (se cobró sin factura: el ingreso cuenta igual). */
+      invoiceStatus: (o.invoice.invoicedAt || o.invoice.number ? "facturada" : o.invoice.none ? "sin_factura" : "pendiente") as "facturada" | "pendiente" | "sin_factura",
     }))
     .sort((a, b) => a.deliveredOn.localeCompare(b.deliveredOn));
   const sales = delivered.reduce((s, o) => s + o.price, 0);
+  const salesWithoutInvoice = delivered.filter((o) => o.invoiceStatus === "sin_factura").reduce((s, o) => s + o.price, 0);
   // Open jobs with a price due this month: what is still to come in sales.
   const pending = docs.orders.items.filter(
     (o) => ["recibida", "en_proceso", "terminada", "garantia"].includes(o.status) && !o.deliveredAt && o.due?.date.startsWith(month),
@@ -83,6 +86,7 @@ export async function financeReport(principal: Principal, monthParam: string | n
     current: principal.today.slice(0, 7),
     quincenas: { q1, q2 },
     sales,
+    salesWithoutInvoice,
     supplies,
     payrollQ1,
     payrollQ2,

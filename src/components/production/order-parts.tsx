@@ -89,6 +89,7 @@ export function OrderCard({
             <Receipt className="size-3" aria-hidden /> Facturar
           </Chip>
         )}
+        {order.invoice.none && !order.invoice.invoicedAt && <Chip tone="neutral">Sin factura</Chip>}
         {order.status === "garantia" && <ShieldAlert className="size-4 text-blocked" aria-label="Garantía abierta" />}
         {blocked && <FileWarning className="size-4 text-blocked" aria-label="Tiene pasos bloqueados" />}
       </div>

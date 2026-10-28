@@ -126,6 +126,16 @@ export function OrderDetailModal({ orderId, onClose, onEdit, initialTab = "resum
           Marcar facturado
         </Button>
       )}
+      {order.invoice.none && !order.invoice.invoicedAt && (s === "cerrada" || s === "entregada") && (
+        <Button size="sm" variant="ghost" icon={<Receipt className="size-4" />} loading={busy === "noinv"} onClick={() => void act("noinv", { action: "noInvoice", none: false }, "Quedó pendiente de facturar")}>
+          Pedir factura
+        </Button>
+      )}
+      {!order.invoice.none && !order.invoice.invoicedAt && ["recibida", "en_proceso", "terminada", "garantia"].includes(s) && (
+        <Button size="sm" variant="ghost" icon={<Receipt className="size-4" />} loading={busy === "noinv"} onClick={() => void act("noinv", { action: "noInvoice", none: true }, "Trabajo sin factura: el ingreso cuenta igual")}>
+          Sin factura
+        </Button>
+      )}
       {(s === "entregada" || s === "cerrada") && (
         <Button size="sm" variant="secondary" icon={<ShieldAlert className="size-4" />} onClick={() => setSheet("claim")}>
           Reclamo
@@ -180,6 +190,7 @@ export function OrderDetailModal({ orderId, onClose, onEdit, initialTab = "resum
         <span className="flex flex-wrap items-center gap-2">
           <OrderStatusChip status={order.status} />
           {order.invoice.pending && <Chip tone="urgent">Facturar</Chip>}
+          {order.invoice.none && !order.invoice.invoicedAt && <Chip tone="neutral">Sin factura</Chip>}
           <span>{order.clientName}</span>
           <DueBadge order={order} today={data.today} timezone={data.settings.timezone} now={prod.ctx.now} />
         </span>
@@ -368,9 +379,17 @@ export function OrderDetailModal({ orderId, onClose, onEdit, initialTab = "resum
   );
 }
 
-function DeliverSheet({ order, onClose }: { order: { id: string; finalPrice: number | null; price: number | null; satisfaction: number | null; workItems: Array<{ status: string }> }; onClose: () => void }) {
+function DeliverSheet({
+  order,
+  onClose,
+}: {
+  order: { id: string; finalPrice: number | null; price: number | null; satisfaction: number | null; workItems: Array<{ status: string }>; invoice: { none: boolean; invoicedAt: string | null } };
+  onClose: () => void;
+}) {
   const [satisfaction, setSatisfaction] = useState<number | null>(order.satisfaction);
   const [finalPrice, setFinalPrice] = useState<number | null>(order.finalPrice ?? order.price);
+  const [noInvoice, setNoInvoice] = useState(order.invoice.none);
+  const invoiced = Boolean(order.invoice.invoicedAt);
   const { run, busy } = useAction();
   const pending = order.workItems.filter((w) => w.status !== "completada").length;
   return (
@@ -384,7 +403,7 @@ function DeliverSheet({ order, onClose }: { order: { id: string; finalPrice: num
           loading={busy === "deliver"}
           icon={<PackageCheck className="size-4" />}
           onClick={async () => {
-            const ok = await run("deliver", () => api.orders.action(order.id, { action: "deliver", satisfaction, finalPrice: finalPrice !== order.price ? finalPrice : null }), "Entregada · empieza el plazo de reclamos");
+            const ok = await run("deliver", () => api.orders.action(order.id, { action: "deliver", satisfaction, finalPrice: finalPrice !== order.price ? finalPrice : null, ...(invoiced ? {} : { noInvoice }) }), "Entregada · empieza el plazo de reclamos");
             if (ok) onClose();
           }}
         >
@@ -398,6 +417,15 @@ function DeliverSheet({ order, onClose }: { order: { id: string; finalPrice: num
         <Field label="Precio final (antes de IVA)" hint="Cámbialo solo si hubo ajustes.">
           {(id, d) => <MoneyInput id={id} ariaDescribedBy={d} value={finalPrice} onChange={setFinalPrice} />}
         </Field>
+        {!invoiced && (
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line p-3 text-sm">
+            <input type="checkbox" className="mt-0.5 size-5 shrink-0 accent-[var(--color-glow)]" checked={noInvoice} onChange={(e) => setNoInvoice(e.target.checked)} />
+            <span>
+              <span className="font-semibold text-ink">Este trabajo va sin factura</span>
+              <span className="block text-muted">El ingreso se guarda igual en Ganancias, pero no se pide facturar.</span>
+            </span>
+          </label>
+        )}
       </div>
     </Modal>
   );
@@ -413,16 +441,28 @@ function InvoiceSheet({ orderId, onClose }: { orderId: string; onClose: () => vo
       title="Marcar como facturado"
       size="sm"
       footer={
-        <Button
-          loading={busy === "inv"}
-          icon={<Receipt className="size-4" />}
-          onClick={async () => {
-            const ok = await run("inv", () => api.orders.action(orderId, { action: "invoice", number: number.trim() || null }), "Facturado");
-            if (ok) onClose();
-          }}
-        >
-          Guardar
-        </Button>
+        <>
+          <Button
+            variant="ghost"
+            loading={busy === "noinv"}
+            onClick={async () => {
+              const ok = await run("noinv", () => api.orders.action(orderId, { action: "noInvoice", none: true }), "Sin factura: el ingreso cuenta igual");
+              if (ok) onClose();
+            }}
+          >
+            Este trabajo no lleva factura
+          </Button>
+          <Button
+            loading={busy === "inv"}
+            icon={<Receipt className="size-4" />}
+            onClick={async () => {
+              const ok = await run("inv", () => api.orders.action(orderId, { action: "invoice", number: number.trim() || null }), "Facturado");
+              if (ok) onClose();
+            }}
+          >
+            Guardar
+          </Button>
+        </>
       }
     >
       <Field label="Número de factura electrónica" hint="Opcional, para encontrarla después.">

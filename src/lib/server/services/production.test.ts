@@ -480,6 +480,62 @@ describe("operarios sin sesión y tablero del taller", () => {
   });
 });
 
+describe("trabajos sin factura", () => {
+  it("el ingreso cuenta en Ganancias pero nunca se pide factura (ni al cerrar, ni en alertas)", async () => {
+    const { admin } = await setup();
+    const finance = await import("./finance");
+    const { order } = await orders.createOrder(admin, baseOrder({ price: 1_500_000 }));
+    await orders.orderAction(admin, order.id, { action: "deliver", satisfaction: null, finalPrice: null, noInvoice: true });
+
+    const result = await scheduler.runScheduler(Date.now() + 3 * 86_400_000 + 60_000);
+    expect(result.closed).toBe(1);
+    // Sin «FACTURAR»: un aviso normal de cierre, que no es urgente.
+    expect(result.notifications[0]).toMatchObject({ type: "order_invoice", urgent: false, title: "CERRADA OT-0001 · sin factura" });
+    const { orders: list } = await db.read(["orders"]);
+    expect(list.items[0]).toMatchObject({ status: "cerrada", invoice: { pending: false, none: true, number: null, invoicedAt: null } });
+    expect((await buildSync(admin)).alerts.some((a) => a.id === "invoice")).toBe(false);
+
+    const report = await finance.financeReport(admin, null);
+    expect(report).toMatchObject({ sales: 1_500_000, salesWithoutInvoice: 1_500_000 });
+    expect(report.orders[0]).toMatchObject({ price: 1_500_000, invoiceStatus: "sin_factura" });
+  });
+
+  it("se puede marcar antes de entregar, revertir (queda pendiente si ya estaba cerrada) y facturar después", async () => {
+    const { admin } = await setup();
+    const { order } = await orders.createOrder(admin, baseOrder({ price: 900_000 }));
+    await orders.orderAction(admin, order.id, { action: "noInvoice", none: true });
+    await orders.orderAction(admin, order.id, { action: "deliver", satisfaction: null, finalPrice: null });
+    await scheduler.runScheduler(Date.now() + 3 * 86_400_000 + 60_000);
+    let { orders: list } = await db.read(["orders"]);
+    expect(list.items[0]!.invoice).toMatchObject({ none: true, pending: false });
+
+    // El cliente pide factura al final: vuelve a quedar pendiente.
+    await orders.orderAction(admin, order.id, { action: "noInvoice", none: false });
+    ({ orders: list } = await db.read(["orders"]));
+    expect(list.items[0]!.invoice).toMatchObject({ none: false, pending: true });
+    expect((await buildSync(admin)).alerts.some((a) => a.id === "invoice")).toBe(true);
+
+    // Facturar quita «sin factura» y ya no se puede volver a marcar.
+    await orders.orderAction(admin, order.id, { action: "invoice", number: "FE-9" });
+    ({ orders: list } = await db.read(["orders"]));
+    expect(list.items[0]!.invoice).toMatchObject({ none: false, pending: false, number: "FE-9" });
+    await expect(orders.orderAction(admin, order.id, { action: "noInvoice", none: true })).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("un trabajo sin marcar sigue pidiendo factura como siempre y «falta factura» se distingue en Ganancias", async () => {
+    const { admin } = await setup();
+    const finance = await import("./finance");
+    const { order } = await orders.createOrder(admin, baseOrder({ price: 700_000 }));
+    await orders.orderAction(admin, order.id, { action: "deliver", satisfaction: null, finalPrice: null });
+    await scheduler.runScheduler(Date.now() + 3 * 86_400_000 + 60_000);
+    const { orders: list } = await db.read(["orders"]);
+    expect(list.items[0]!.invoice).toMatchObject({ pending: true, none: false });
+    const report = await finance.financeReport(admin, null);
+    expect(report).toMatchObject({ sales: 700_000, salesWithoutInvoice: 0 });
+    expect(report.orders[0]!.invoiceStatus).toBe("pendiente");
+  });
+});
+
 describe("ganancias del mes", () => {
   it("ventas entregadas menos insumos y las dos quincenas, con lo que se paga a cada quien", async () => {
     const { admin } = await setup();
