@@ -216,9 +216,10 @@ export interface OrderInput {
 
 export type OrderActionInput =
   | { action: "status"; to: OrderStatus }
-  | { action: "deliver"; satisfaction: number | null; finalPrice: number | null }
+  | { action: "deliver"; satisfaction: number | null; finalPrice: number | null; noInvoice?: boolean }
   | { action: "close" }
   | { action: "invoice"; number: string | null }
+  | { action: "noInvoice"; none: boolean }
   | { action: "claim"; kind: ClaimKind; description: string }
   | { action: "resolveClaim"; claimId: string; resolution: string }
   | { action: "satisfaction"; value: number | null }

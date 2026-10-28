@@ -339,7 +339,7 @@ export function createOrderIn(docs: OrderDocs, principal: Principal, input: Orde
     finishedAt: null,
     deliveredAt: null,
     closedAt: null,
-    invoice: { pending: false, number: null, invoicedAt: null },
+    invoice: { pending: false, number: null, invoicedAt: null, none: false },
     claims: [],
     satisfaction: null,
     reminders: { before24h: false, dayOf: false, overdue: false },
@@ -438,9 +438,10 @@ export async function updateOrder(principal: Principal, id: string, patch: Parti
 
 export type OrderAction =
   | { action: "status"; to: OrderStatus }
-  | { action: "deliver"; satisfaction: number | null; finalPrice: number | null }
+  | { action: "deliver"; satisfaction: number | null; finalPrice: number | null; noInvoice?: boolean }
   | { action: "close" }
   | { action: "invoice"; number: string | null }
+  | { action: "noInvoice"; none: boolean }
   | { action: "claim"; kind: ClaimKind; description: string }
   | { action: "resolveClaim"; claimId: string; resolution: string }
   | { action: "satisfaction"; value: number | null }
@@ -456,20 +457,46 @@ const SUPPLY_STATUSES: OrderStatus[] = ["recibida", "en_proceso", "terminada", "
 export function closeService(docs: Pick<OrderDocs, "notifications">, order: Order, actor: Actor, automatic: boolean): Notification {
   order.status = "cerrada";
   order.closedAt = nowIso();
-  if (!order.invoice.invoicedAt) order.invoice.pending = true;
+  // A job marked «sin factura» is closed without asking for an invoice.
+  if (!order.invoice.invoicedAt && !order.invoice.none) order.invoice.pending = true;
   track(order, actor, automatic ? "Cierre automático: sin reclamos en el plazo" : "Cerró el servicio", [
     { field: "status", label: "Estado", from: ORDER_STATUS_LABEL.entregada, to: ORDER_STATUS_LABEL.cerrada },
   ]);
+  const closedText = automatic ? "Pasó el plazo sin reclamos: el servicio quedó cerrado." : "Servicio cerrado.";
+  if (order.invoice.none && !order.invoice.invoicedAt) {
+    return pushNotification(docs.notifications, actor, {
+      audience: { kind: "admins" },
+      type: "order_invoice",
+      title: `CERRADA ${order.folio} · sin factura`,
+      body: `${order.clientName} · ${order.title}. ${closedText} Va sin factura: el ingreso ya cuenta, no hay nada que facturar.`,
+      link: `/admin/ordenes?o=${order.id}`,
+      urgent: false,
+    });
+  }
   return pushNotification(docs.notifications, actor, {
     audience: { kind: "admins" },
     type: "order_invoice",
     title: `FACTURAR ${order.folio}`,
-    body: `${order.clientName} · ${order.title}. ${automatic ? "Pasó el plazo sin reclamos: el servicio quedó cerrado." : "Servicio cerrado."}`,
+    body: `${order.clientName} · ${order.title}. ${closedText}`,
     link: `/admin/ordenes?o=${order.id}`,
     urgent: true,
   });
 }
 
+
+/**
+ * «Sin factura»: el trabajo se cobra sin factura. El ingreso (precio) cuenta igual
+ * en Ganancias; solo se deja de pedir la factura. Al revertirlo, si el servicio ya
+ * estaba cerrado, vuelve a quedar pendiente de facturar.
+ */
+function setNoInvoice(order: Order, actor: Actor, none: boolean) {
+  order.invoice.none = none;
+  if (none) order.invoice.pending = false;
+  else if (order.status === "cerrada" && !order.invoice.invoicedAt) order.invoice.pending = true;
+  track(order, actor, none ? "Marcó el trabajo como sin factura" : "Volvió a pedir factura", [
+    { field: "invoice", label: "Factura", from: none ? "Con factura" : "Sin factura", to: none ? "Sin factura" : "Con factura" },
+  ]);
+}
 
 /**
  * Insumos requeridos de UNA orden. Marcar «conseguido» solo toca la línea de
@@ -666,6 +693,7 @@ export async function orderAction(principal: Principal, id: string, input: Order
         order.deliveredAt = now;
         if (input.satisfaction !== null) order.satisfaction = input.satisfaction;
         if (input.finalPrice !== null) order.finalPrice = input.finalPrice;
+        if (input.noInvoice !== undefined && !order.invoice.invoicedAt && order.invoice.none !== input.noInvoice) setNoInvoice(order, actor, input.noInvoice);
         statusChange("entregada", `Entregó al cliente · cierre automático en ${docs.settings.production.claimWindowDays} día(s) sin reclamos`);
         audit(docs.audit, actor, "ot_entregada", order.folio, order.clientName);
         break;
@@ -679,9 +707,17 @@ export async function orderAction(principal: Principal, id: string, input: Order
       }
       case "invoice": {
         if (!["entregada", "cerrada"].includes(from)) throw conflict("Se factura un servicio entregado o cerrado.");
-        order.invoice = { pending: false, number: input.number, invoicedAt: now };
-        track(order, actor, "Marcó como facturado", [{ field: "invoice", label: "Factura", from: "Pendiente", to: input.number ?? "Facturado" }]);
+        const wasNone = order.invoice.none;
+        order.invoice = { pending: false, number: input.number, invoicedAt: now, none: false };
+        track(order, actor, "Marcó como facturado", [{ field: "invoice", label: "Factura", from: wasNone ? "Sin factura" : "Pendiente", to: input.number ?? "Facturado" }]);
         audit(docs.audit, actor, "ot_facturada", order.folio, input.number);
+        break;
+      }
+      case "noInvoice": {
+        if (from === "cancelada") throw conflict("Esta orden está cancelada.");
+        if (order.invoice.invoicedAt) throw conflict("Esta orden ya tiene factura.");
+        if (order.invoice.none !== input.none) setNoInvoice(order, actor, input.none);
+        audit(docs.audit, actor, input.none ? "ot_sin_factura" : "ot_con_factura", order.folio);
         break;
       }
       case "claim": {
@@ -825,7 +861,7 @@ export async function createHistoricalOrder(principal: Principal, input: Histori
       finishedAt: delivered,
       deliveredAt: delivered,
       closedAt: delivered,
-      invoice: { pending: false, number: input.invoiceNumber, invoicedAt: input.invoiceNumber ? delivered : null },
+      invoice: { pending: false, number: input.invoiceNumber, invoicedAt: input.invoiceNumber ? delivered : null, none: false },
       claims: [],
       satisfaction: input.satisfaction,
       reminders: { before24h: true, dayOf: true, overdue: true },

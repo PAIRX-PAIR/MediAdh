@@ -475,14 +475,19 @@ export const orderSchema = z.object({
   finishedAt: isoDateTime.nullable().default(null),
   deliveredAt: isoDateTime.nullable().default(null),
   closedAt: isoDateTime.nullable().default(null),
-  /** "FACTURAR" stays on until someone marks the invoice as issued. */
+  /**
+   * "FACTURAR" stays on until someone marks the invoice as issued. `none` = a job
+   * that is charged without an invoice: its income still counts in the finances,
+   * but nothing asks for an invoice (no FACTURAR, alert or badge).
+   */
   invoice: z
     .object({
       pending: z.boolean().default(false),
       number: z.string().nullable().default(null),
       invoicedAt: isoDateTime.nullable().default(null),
+      none: z.boolean().default(false),
     })
-    .default({ pending: false, number: null, invoicedAt: null }),
+    .default({ pending: false, number: null, invoicedAt: null, none: false }),
   claims: z.array(claimSchema).default([]),
   /** Satisfacción del cliente 1–5. */
   satisfaction: z.number().int().min(1).max(5).nullable().default(null),

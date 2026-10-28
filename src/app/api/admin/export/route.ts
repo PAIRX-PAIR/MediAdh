@@ -67,7 +67,7 @@ export const GET = route({ access: "admin" }, async ({ req, principal }) => {
         o.satisfaction,
         o.claims.filter((c) => c.kind === "garantia").length,
         o.claims.filter((c) => c.kind === "devolucion").length,
-        o.invoice.number ?? (o.invoice.pending ? "PENDIENTE" : null),
+        o.invoice.number ?? (o.invoice.pending ? "PENDIENTE" : o.invoice.none ? "SIN FACTURA" : null),
         o.historical ? "Sí" : "No",
       ]);
     }

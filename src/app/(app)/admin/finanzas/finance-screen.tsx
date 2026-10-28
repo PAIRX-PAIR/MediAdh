@@ -20,13 +20,15 @@ interface FinanceReport {
   current: string;
   quincenas: { q1: { from: string; to: string; payDate: string }; q2: { from: string; to: string; payDate: string } };
   sales: number;
+  /** Parte de las ventas de trabajos que se cobraron sin factura (ya suman en «sales»). */
+  salesWithoutInvoice: number;
   supplies: number;
   payrollQ1: number;
   payrollQ2: number;
   employerCost: number;
   employerCostPct: number;
   profit: number;
-  orders: Array<{ id: string; folio: string; clientName: string; title: string; deliveredOn: string; price: number; supplies: number; invoiced: boolean }>;
+  orders: Array<{ id: string; folio: string; clientName: string; title: string; deliveredOn: string; price: number; supplies: number; invoiced: boolean; invoiceStatus: "facturada" | "pendiente" | "sin_factura" }>;
   withoutPrice: number;
   pendingSales: number;
   pendingCount: number;
@@ -108,7 +110,7 @@ export function FinanceScreen() {
         <StatTile
           label="Ventas del mes"
           value={formatCop(report.sales)}
-          hint={`${report.orders.length} entregado(s)${report.pendingCount ? ` · ${formatCop(report.pendingSales)} por entregar` : ""}`}
+          hint={`${report.orders.length} entregado(s)${report.salesWithoutInvoice > 0 ? ` · ${formatCop(report.salesWithoutInvoice)} sin factura` : ""}${report.pendingCount ? ` · ${formatCop(report.pendingSales)} por entregar` : ""}`}
           tone="glow"
         />
         <StatTile label="Insumos" value={formatCop(report.supplies)} />
@@ -142,6 +144,9 @@ export function FinanceScreen() {
         <h2 className="mb-3 font-display text-lg font-semibold text-ink">Del ingreso a la ganancia</h2>
         <dl className="tabular flex max-w-xl flex-col gap-1.5 text-sm">
           <Row label="Ventas del mes (trabajos entregados)" value={formatCop(report.sales)} strong />
+          {report.salesWithoutInvoice > 0 && (
+            <p className="-mt-1 text-xs text-muted">Incluye {formatCop(report.salesWithoutInvoice)} de trabajos cobrados sin factura: el ingreso cuenta igual.</p>
+          )}
           {report.pendingCount > 0 && (
             <p className="-mt-1 text-xs text-muted">
               Por entregar este mes: {formatCop(report.pendingSales)} en {report.pendingCount} orden(es). Suman cuando se marquen como entregadas.
@@ -234,7 +239,8 @@ export function FinanceScreen() {
                   </span>
                 </span>
                 <span className="flex items-center gap-2">
-                  {!o.invoiced && <Chip tone="pending">Sin factura</Chip>}
+                  {o.invoiceStatus === "pendiente" && <Chip tone="pending">Falta factura</Chip>}
+                  {o.invoiceStatus === "sin_factura" && <Chip tone="neutral">Sin factura</Chip>}
                   <span className="tabular font-semibold text-ink">{formatCop(o.price)}</span>
                 </span>
               </li>
