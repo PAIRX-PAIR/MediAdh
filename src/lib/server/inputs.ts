@@ -205,10 +205,6 @@ const productionSettingsPatch = z
     processRates: z
       .object({ torno: money, fresadora: money, cepillo: money, cnc: money, prensa: money, soldadura: money, banco: money, pintura: money })
       .partial(),
-    defaultMarginPct: z.number().min(0).max(500),
-    difficultyMarginPct: z.number().min(0).max(500),
-    highDifficultyMarginPct: z.number().min(0).max(500),
-    urgencyMarginPct: z.number().min(0).max(1000),
     warrantyDays: z.number().int().min(0).max(3650),
     ivaPct: z.number().min(0).max(100),
     quoteValidDays: z.number().int().min(1).max(365),
