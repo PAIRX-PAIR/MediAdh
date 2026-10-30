@@ -618,13 +618,6 @@ export const productionSettingsSchema = z.object({
       pintura: z.number().min(0).default(0),
     })
     .default({ torno: 0, fresadora: 0, cepillo: 0, cnc: 0, prensa: 0, soldadura: 0, banco: 0, pintura: 0 }),
-  /** Utilidad base de S.M.I.: 35 %. */
-  defaultMarginPct: z.number().min(0).max(500).default(35),
-  /** Points added to the margin for "dificultad mayor" (2) and "muy alta" (3). */
-  difficultyMarginPct: z.number().min(0).max(500).default(15),
-  highDifficultyMarginPct: z.number().min(0).max(500).default(25),
-  /** Points added when the job is urgent (se baja la pieza montada en la máquina). */
-  urgencyMarginPct: z.number().min(0).max(1000).default(125),
   /** Garantía sobre el trabajo entregado (días). Soldadura no tiene garantía. */
   warrantyDays: z.number().int().min(0).max(3650).default(90),
   ivaPct: z.number().min(0).max(100).default(19),

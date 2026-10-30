@@ -1,8 +1,8 @@
 import "server-only";
 import { diffFields } from "@/lib/domain/diff";
 import { QUOTE_STATUS_LABEL } from "@/lib/domain/labels";
-import { extraMarginPct, formatCop, quoteTotals } from "@/lib/domain/quote";
-import type { Difficulty, Machine, Notification, Order, Process, ProductionSettings, Quote } from "@/lib/domain/schema";
+import { formatCop, quoteTotals } from "@/lib/domain/quote";
+import type { Difficulty, Machine, Notification, Order, Process, Quote } from "@/lib/domain/schema";
 import { isRealDate } from "@/lib/domain/time";
 import type { Principal } from "../auth/principal";
 import { badRequest, conflict, notFound } from "../http";
@@ -100,8 +100,6 @@ function pseudoLoad(machineId: string, process: Process, hours: number): Order {
   } as unknown as Order;
 }
 
-const extraFor = (q: Pick<Quote, "difficulty" | "urgent">, production: ProductionSettings) => extraMarginPct(q.difficulty, q.urgent, production);
-
 export async function createQuote(principal: Principal, input: QuoteInput) {
   return getDb().transact<QuoteDocs, Quote>(["quotes", "clients", "settings", "machines", "audit"], "Crea una cotización", (docs) => {
     const production = docs.settings.production;
@@ -117,8 +115,9 @@ export async function createQuote(principal: Principal, input: QuoteInput) {
       ...lines(input, null, production.processRates, docs.machines.items),
       difficulty: input.difficulty,
       urgent: input.urgent,
-      marginPct: input.marginPct ?? production.defaultMarginPct,
-      extraMarginPct: extraFor({ difficulty: input.difficulty, urgent: input.urgent }, production),
+      marginPct: input.marginPct ?? 0,
+      // La dificultad y la urgencia no suman puntos: la utilidad es la que se escribe.
+      extraMarginPct: 0,
       ivaPct: input.ivaPct ?? production.ivaPct,
       validDays: input.validDays ?? production.quoteValidDays,
       status: "borrador",
@@ -155,8 +154,9 @@ export async function updateQuote(principal: Principal, id: string, patch: Parti
     for (const key of ["title", "description", "quantity", "difficulty", "urgent", "notes"] as const) {
       if (patch[key] !== undefined) (quote as Record<string, unknown>)[key] = patch[key];
     }
-    // Difficulty or urgency changed: re-apply the current rules of Ajustes.
-    if (patch.difficulty !== undefined || patch.urgent !== undefined) quote.extraMarginPct = extraFor(quote, docs.settings.production);
+    // Un borrador hecho con la regla anterior pierde sus puntos de dificultad/urgencia al guardarse;
+    // una cotización ya enviada conserva su valor para no cambiarle el precio al cliente.
+    if (quote.status === "borrador") quote.extraMarginPct = 0;
     if (patch.marginPct !== undefined && patch.marginPct !== null) quote.marginPct = patch.marginPct;
     if (patch.ivaPct !== undefined && patch.ivaPct !== null) quote.ivaPct = patch.ivaPct;
     if (patch.validDays !== undefined && patch.validDays !== null) quote.validDays = patch.validDays;

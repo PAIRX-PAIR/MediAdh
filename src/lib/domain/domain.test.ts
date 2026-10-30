@@ -9,7 +9,7 @@ import { canTransition, dueReminders, isLate, shouldAutoClose, statusFromWork } 
 import { formatNit, parseNit, verificationDigit } from "./nit";
 import { dayHours, liquidate, paidDaysIn, quincenaOf, shiftQuincena } from "./payroll";
 import { canCommit, machineHoursOn, nextUp, occupancy, planOrders, prioritize, type PlanContext } from "./planning";
-import { extraMarginPct, quoteDisplayStatus, quoteTotals } from "./quote";
+import { quoteDisplayStatus, quoteTotals } from "./quote";
 import type { Machine, Order, WorkItem } from "./schema";
 import { zonedInstant } from "./time";
 
@@ -204,13 +204,13 @@ describe("cotizador", () => {
     expect(normal.unitPrice).toBe(135_000);
     expect(normal.hoursByProcess).toEqual({ torno: 3, fresadora: 1.5 });
 
-    const rules = { difficultyMarginPct: 15, highDifficultyMarginPct: 25, urgencyMarginPct: 125 };
-    expect(extraMarginPct(2, false, rules)).toBe(15);
-    expect(extraMarginPct(1, true, rules)).toBe(125);
-    expect(extraMarginPct(2, true, rules)).toBe(140);
+    // Cotizaciones anteriores a quitar los puntos automáticos conservan su ajuste guardado.
     const difficult = quoteTotals({ ...base, marginPct: 35, extraMarginPct: 15 });
     expect(difficult).toMatchObject({ marginPct: 50, baseMargin: 140_000, extraMargin: 60_000, subtotal: 600_000 });
-    // Urgencia: se baja la pieza montada; la utilidad sube a 35 + 125 = 160 %.
+    // Un borrador con puntos de la regla anterior no los cuenta; una enviada sí los conserva.
+    expect(quoteTotals({ ...base, marginPct: 35, extraMarginPct: 125, status: "borrador" })).toMatchObject({ marginPct: 35, extraMargin: 0, subtotal: 540_000 });
+    expect(quoteTotals({ ...base, marginPct: 35, extraMarginPct: 125, status: "enviada" }).subtotal).toBe(1_040_000);
+    // Ajuste guardado de 125 pts: la utilidad sube a 35 + 125 = 160 %.
     const urgent = quoteTotals({ ...base, marginPct: 35, extraMarginPct: 125 });
     expect(urgent.subtotal).toBe(1_040_000);
     expect(urgent.total).toBe(Math.round(1_040_000 * 1.19));

@@ -44,7 +44,6 @@ export function demoProduction(ctx: DemoContext) {
 
   // Example tariffs, only for the demo (the real app starts at $0 until the admin sets them).
   settings.production.processRates = { torno: 55_000, fresadora: 65_000, cepillo: 50_000, cnc: 110_000, prensa: 45_000, soldadura: 60_000, banco: 40_000, pintura: 38_000 };
-  settings.production.defaultMarginPct = 35;
 
   const machines: Collection<Machine> = defaultMachines(iso);
   const rates: Record<string, number> = { cnc: 95_000, torno: 48_000, fresadora: 55_000, cepillo: 42_000, prensa: 38_000, soldadura: 50_000, banco: 32_000, pintura: 30_000 };

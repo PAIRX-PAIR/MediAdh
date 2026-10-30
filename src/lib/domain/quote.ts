@@ -1,19 +1,5 @@
-import type { Difficulty, Process, ProductionSettings, Quote, QuoteStatus } from "./schema";
+import type { Process, Quote, QuoteStatus } from "./schema";
 import { addDays } from "./time";
-
-/**
- * Points added to the base margin (S.M.I.: 35 %): +15 for "dificultad mayor",
- * +25 for "muy alta", +125 when the job is urgent and bumps the piece that was
- * mounted on the machine. All values come from Ajustes.
- */
-export function extraMarginPct(
-  difficulty: Difficulty,
-  urgent: boolean,
-  s: Pick<ProductionSettings, "difficultyMarginPct" | "highDifficultyMarginPct" | "urgencyMarginPct">,
-): number {
-  const byDifficulty = difficulty === 3 ? s.highDifficultyMarginPct : difficulty === 2 ? s.difficultyMarginPct : 0;
-  return byDifficulty + (urgent ? s.urgencyMarginPct : 0);
-}
 
 export interface QuoteTotals {
   materials: number;
@@ -23,11 +9,11 @@ export interface QuoteTotals {
   totalHours: number;
   /** Costo directo = materiales + mano de obra. */
   cost: number;
-  /** Utilidad total aplicada (%): base + dificultad + urgencia. */
+  /** Utilidad total aplicada (%): la que se escribe en la cotización (+ el ajuste de una cotización anterior, si lo tiene). */
   marginPct: number;
-  /** Utilidad base en pesos. */
+  /** Utilidad en pesos (la que se escribe en la cotización). */
   baseMargin: number;
-  /** Utilidad adicional por dificultad y urgencia en pesos. */
+  /** Ajuste en pesos de una cotización hecha con la regla anterior (puntos por dificultad/urgencia). Las nuevas siempre en 0. */
   extraMargin: number;
   margin: number;
   /** Precio antes de IVA. */
@@ -43,7 +29,7 @@ const round = (n: number) => Math.round(n);
 /**
  * Order of operations (all in COP, rounded to whole pesos):
  *   costo     = Σ materiales (cantidad × costo) + Σ horas × tarifa de la máquina
- *   utilidad  = costo × (% base + % dificultad + % urgencia)
+ *   utilidad  = costo × % de utilidad (el que se escribe en cada cotización)
  *   subtotal  = costo + utilidad                    (precio antes de IVA)
  *   IVA       = subtotal × % IVA
  *   total     = subtotal + IVA
@@ -51,7 +37,10 @@ const round = (n: number) => Math.round(n);
 type TotalsInput = Pick<Quote, "marginPct" | "ivaPct" | "quantity"> & {
   materials: Array<Pick<Quote["materials"][number], "quantity" | "unitCost">>;
   labor: Array<Pick<Quote["labor"][number], "process" | "hours" | "rate">>;
+  /** Solo cotizaciones anteriores a que se quitaran los puntos automáticos; en las nuevas es 0. */
   extraMarginPct?: number;
+  /** Un borrador nunca cuenta esos puntos (la utilidad es la que se escribe); una cotización ya enviada los conserva. */
+  status?: QuoteStatus;
 };
 
 export function quoteTotals(q: TotalsInput): QuoteTotals {
@@ -66,7 +55,7 @@ export function quoteTotals(q: TotalsInput): QuoteTotals {
   }
   labor = round(labor);
   const cost = materials + labor;
-  const extra = q.extraMarginPct ?? 0;
+  const extra = q.status === "borrador" ? 0 : (q.extraMarginPct ?? 0);
   const baseMargin = round(cost * (q.marginPct / 100));
   const margin = round(cost * ((q.marginPct + extra) / 100));
   const subtotal = cost + margin;

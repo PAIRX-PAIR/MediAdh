@@ -241,6 +241,34 @@ describe("entrega, cierre automático y facturación", () => {
   });
 });
 
+describe("cotizador: solo suma lo que se escribe", () => {
+  it("sin utilidad ni horas escritas, el total es el costo más IVA (nada se agrega solo)", async () => {
+    const { admin } = await setup();
+    const quote = await quotes.createQuote(admin, {
+      clientId: null,
+      clientName: "Molinos",
+      title: "Buje",
+      description: "",
+      quantity: 1,
+      materials: [{ description: "Bronce", quantity: 2, unitCost: 150_000 }],
+      labor: [],
+      difficulty: 3,
+      urgent: true,
+      marginPct: null,
+      ivaPct: null,
+      validDays: null,
+      notes: "",
+    });
+    // Dificultad muy alta y urgencia no suman puntos; sin utilidad escrita es 0 %.
+    expect(quote).toMatchObject({ marginPct: 0, extraMarginPct: 0 });
+    const { quoteTotals } = await import("@/lib/domain/quote");
+    expect(quoteTotals(quote)).toMatchObject({ cost: 300_000, margin: 0, subtotal: 300_000, iva: 57_000, total: 357_000 });
+    // Con utilidad escrita (10 %) suma exactamente esa.
+    const updated = await quotes.updateQuote(admin, quote.id, { marginPct: 10 });
+    expect(quoteTotals(updated)).toMatchObject({ margin: 30_000, subtotal: 330_000, total: Math.round(330_000 * 1.19) });
+  });
+});
+
 describe("cotizador → orden de trabajo", () => {
   it("aprobar una cotización crea la OT con su ruta, insumos y precio", async () => {
     const { admin } = await setup();
@@ -262,13 +290,13 @@ describe("cotizador → orden de trabajo", () => {
       validDays: null,
       notes: "",
     });
-    // Dificultad mayor (+15) y urgencia (+125) se suman a la utilidad base.
-    expect(quote).toMatchObject({ folio: "COT-0001", ivaPct: 19, validDays: 15, extraMarginPct: 140 });
+    // Dificultad mayor y urgencia ya no suman puntos: la utilidad es la que se escribe (20 %).
+    expect(quote).toMatchObject({ folio: "COT-0001", ivaPct: 19, validDays: 15, extraMarginPct: 0 });
     expect(quote.labor[0]!.rate).toBe(50_000);
     await quotes.setQuoteStatus(admin, quote.id, "enviada");
     const { order } = await quotes.approveQuote(admin, quote.id, { due: { date: "2099-02-01", time: "12:00" }, condition: "", machines: {} });
-    // (100.000 + 200.000) × (1 + 0,20 + 0,15 + 1,25) = 780.000 antes de IVA.
-    expect(order.price).toBe(780_000);
+    // (100.000 + 200.000) × (1 + 0,20) = 360.000 antes de IVA.
+    expect(order.price).toBe(360_000);
     expect(order.urgent).toBe(true);
     expect(order.workItems[0]).toMatchObject({ process: "torno", plannedHours: 4 });
     expect(order.workItems[0]!.machineId).not.toBeNull();

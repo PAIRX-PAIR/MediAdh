@@ -13,7 +13,7 @@ import { useAction } from "@/lib/client/use-action";
 import { useProduction } from "@/lib/client/use-production";
 import { PROCESS_LABEL, QUOTE_STATUS_LABEL, formatDate } from "@/lib/domain/labels";
 import { canCommit } from "@/lib/domain/planning";
-import { extraMarginPct, formatCop, quoteDisplayStatus, quoteTotals, quoteValidUntil, quoteWarnings } from "@/lib/domain/quote";
+import { formatCop, quoteDisplayStatus, quoteTotals, quoteValidUntil, quoteWarnings } from "@/lib/domain/quote";
 import { PROCESSES, type Difficulty, type Machine, type Process, type ProductionSettings, type Quote } from "@/lib/domain/schema";
 import { addDays } from "@/lib/domain/time";
 import type { QuoteView } from "@/lib/domain/views";
@@ -74,10 +74,11 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
           description: "",
           quantity: 1,
           materials: [],
-          labor: [{ process: "torno", machineId: null, description: "", hours: 1, rate: rates?.torno ?? 0 }],
+          // Nada viene puesto de antemano: ni horas, ni utilidad. Todo lo que suma lo escribes tú.
+          labor: [],
           difficulty: 1,
           urgent: false,
-          marginPct: prod.settings?.defaultMarginPct ?? 0,
+          marginPct: 0,
           ivaPct: prod.settings?.ivaPct ?? 19,
           validDays: prod.settings?.quoteValidDays ?? 15,
           notes: "",
@@ -102,13 +103,9 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
   }, [quote, quote?.updatedAt]);
 
   const locked = quote?.status === "aprobada" || quote?.status === "rechazada";
-  // The stored extra margin is a snapshot; a changed difficulty/urgency uses today's rules.
-  const extra =
-    quote && quote.difficulty === form.difficulty && quote.urgent === form.urgent
-      ? quote.extraMarginPct
-      : prod.settings
-        ? extraMarginPct(form.difficulty, form.urgent, prod.settings)
-        : 0;
+  // La utilidad es la que se escribe. Solo una cotización ya enviada (hecha con la regla anterior)
+  // conserva sus puntos de dificultad/urgencia, para no cambiarle el precio al cliente.
+  const extra = quote && quote.status !== "borrador" ? quote.extraMarginPct : 0;
   const calc = {
     materials: form.materials,
     labor: form.labor.map((l) => ({ ...l, id: l.id ?? "", rate: l.rate ?? 0 })),
@@ -248,7 +245,7 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
           </section>
 
           <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="Utilidad base sobre costo">{(id) => <NumberInput id={id} value={form.marginPct} onChange={(v) => set("marginPct", v ?? 0)} suffix="%" max={500} />}</Field>
+            <Field label="Utilidad sobre costo" hint="La pones tú en cada cotización.">{(id, d) => <NumberInput id={id} ariaDescribedBy={d} value={form.marginPct} onChange={(v) => set("marginPct", v ?? 0)} suffix="%" max={500} />}</Field>
             <Field label="IVA">{(id) => <NumberInput id={id} value={form.ivaPct} onChange={(v) => set("ivaPct", v ?? 0)} suffix="%" max={100} />}</Field>
             <Field label="Vigencia">{(id) => <NumberInput id={id} integer min={1} max={365} value={form.validDays} onChange={(v) => set("validDays", v ?? 15)} suffix="días" />}</Field>
           </div>
@@ -280,18 +277,18 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
               onChange={(v) => !locked && set("difficulty", Number(v) as Difficulty)}
               options={[
                 { value: "1", label: "Normal" },
-                { value: "2", label: `Mayor +${prod.settings?.difficultyMarginPct ?? 15}` },
-                { value: "3", label: `Muy alta +${prod.settings?.highDifficultyMarginPct ?? 25}` },
+                { value: "2", label: "Mayor" },
+                { value: "3", label: "Muy alta" },
               ]}
               className="[&>button]:flex-1 [&>button]:justify-center"
             />
             <label className="mt-3 flex items-start gap-3 rounded-lg border border-line p-2.5 text-sm text-ink-soft">
               <input type="checkbox" disabled={locked} checked={form.urgent} onChange={(e) => set("urgent", e.target.checked)} className="mt-0.5 size-5 accent-[var(--color-glow)]" />
               <span>
-                <strong className="text-ink">Urgente</strong>: hay que bajar la pieza que está montada en la máquina (+{prod.settings?.urgencyMarginPct ?? 125} puntos de utilidad; va primero en la cola).
+                <strong className="text-ink">Urgente</strong>: hay que bajar la pieza que está montada en la máquina (va primero en la cola).
               </span>
             </label>
-            <p className="mt-2 text-xs text-muted">Los puntos se suman a la utilidad base ({prod.settings?.defaultMarginPct ?? 35} %). Se ajustan en Ajustes → Producción.</p>
+            <p className="mt-2 text-xs text-muted">La dificultad y la urgencia ordenan la cola y la planeación; no cambian el precio. La utilidad la pones tú arriba.</p>
           </div>
 
           <dl className="tabular flex flex-col gap-1.5 rounded-xl border border-glow/30 bg-navy-900/60 p-4 text-sm">
@@ -299,7 +296,7 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
             <Row label={`Horas máquina (${totals.totalHours} h)`} value={formatCop(totals.labor)} />
             <Row label="Costo directo" value={formatCop(totals.cost)} strong />
             <Row label={`Utilidad ${form.marginPct ?? 0} %`} value={formatCop(totals.baseMargin)} />
-            {totals.extraMargin > 0 && <Row label={`Dificultad / urgencia +${extra} pts`} value={formatCop(totals.extraMargin)} />}
+            {totals.extraMargin > 0 && <Row label={`Ajuste de la regla anterior +${extra} pts`} value={formatCop(totals.extraMargin)} />}
             <Row label="Subtotal (antes de IVA)" value={formatCop(totals.subtotal)} strong />
             <Row label={`IVA ${form.ivaPct ?? 0} %`} value={formatCop(totals.iva)} />
             <div className="mt-1 flex items-baseline justify-between border-t border-line pt-2">
