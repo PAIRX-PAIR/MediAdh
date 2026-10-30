@@ -106,12 +106,16 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
   // La utilidad es la que se escribe. Solo una cotización ya enviada (hecha con la regla anterior)
   // conserva sus puntos de dificultad/urgencia, para no cambiarle el precio al cliente.
   const extra = quote && quote.status !== "borrador" ? quote.extraMarginPct : 0;
+  // Una cotización ya enviada con la regla anterior (recargo sobre el costo) conserva su valor.
+  const oldRule = Boolean(quote && quote.status !== "borrador" && quote.marginBasis === "costo");
   const calc = {
     materials: form.materials,
     labor: form.labor.map((l) => ({ ...l, id: l.id ?? "", rate: l.rate ?? 0 })),
     difficulty: form.difficulty,
     marginPct: form.marginPct ?? 0,
     extraMarginPct: extra,
+    status: quote?.status ?? ("borrador" as const),
+    marginBasis: quote?.marginBasis,
     ivaPct: form.ivaPct ?? 19,
     quantity: form.quantity,
   };
@@ -245,7 +249,12 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
           </section>
 
           <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="Utilidad sobre costo" hint="La pones tú en cada cotización.">{(id, d) => <NumberInput id={id} ariaDescribedBy={d} value={form.marginPct} onChange={(v) => set("marginPct", v ?? 0)} suffix="%" max={500} />}</Field>
+            <Field
+              label={oldRule ? "Utilidad sobre costo (regla anterior)" : "Utilidad sobre el precio"}
+              hint={oldRule ? "Ya se envió así: su valor no cambia." : "La parte del precio que te queda: con 30 %, de cada $100 que cobras, $30 son utilidad."}
+            >
+              {(id, d) => <NumberInput id={id} ariaDescribedBy={d} value={form.marginPct} onChange={(v) => set("marginPct", v ?? 0)} suffix="%" max={oldRule ? 500 : 99} />}
+            </Field>
             <Field label="IVA">{(id) => <NumberInput id={id} value={form.ivaPct} onChange={(v) => set("ivaPct", v ?? 0)} suffix="%" max={100} />}</Field>
             <Field label="Vigencia">{(id) => <NumberInput id={id} integer min={1} max={365} value={form.validDays} onChange={(v) => set("validDays", v ?? 15)} suffix="días" />}</Field>
           </div>
@@ -295,7 +304,7 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
             <Row label="Materiales" value={formatCop(totals.materials)} />
             <Row label={`Horas máquina (${totals.totalHours} h)`} value={formatCop(totals.labor)} />
             <Row label="Costo directo" value={formatCop(totals.cost)} strong />
-            <Row label={`Utilidad ${form.marginPct ?? 0} %`} value={formatCop(totals.baseMargin)} />
+            <Row label={oldRule ? `Utilidad ${form.marginPct ?? 0} % sobre costo` : `Utilidad ${totals.marginPct} % del precio`} value={formatCop(totals.baseMargin)} />
             {totals.extraMargin > 0 && <Row label={`Ajuste de la regla anterior +${extra} pts`} value={formatCop(totals.extraMargin)} />}
             <Row label="Subtotal (antes de IVA)" value={formatCop(totals.subtotal)} strong />
             <Row label={`IVA ${form.ivaPct ?? 0} %`} value={formatCop(totals.iva)} />

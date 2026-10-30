@@ -1,7 +1,7 @@
 import "server-only";
 import { diffFields } from "@/lib/domain/diff";
 import { QUOTE_STATUS_LABEL } from "@/lib/domain/labels";
-import { formatCop, quoteTotals } from "@/lib/domain/quote";
+import { formatCop, MAX_MARGIN_ON_PRICE, quoteTotals } from "@/lib/domain/quote";
 import type { Difficulty, Machine, Notification, Order, Process, Quote } from "@/lib/domain/schema";
 import { isRealDate } from "@/lib/domain/time";
 import type { Principal } from "../auth/principal";
@@ -100,6 +100,13 @@ function pseudoLoad(machineId: string, process: Process, hours: number): Order {
   } as unknown as Order;
 }
 
+/** Un borrador siempre usa la regla vigente: utilidad sobre el precio y sin puntos automáticos. */
+function useCurrentRules(quote: Quote) {
+  quote.extraMarginPct = 0;
+  quote.marginBasis = "precio";
+  quote.marginPct = Math.min(quote.marginPct, MAX_MARGIN_ON_PRICE);
+}
+
 export async function createQuote(principal: Principal, input: QuoteInput) {
   return getDb().transact<QuoteDocs, Quote>(["quotes", "clients", "settings", "machines", "audit"], "Crea una cotización", (docs) => {
     const production = docs.settings.production;
@@ -116,8 +123,9 @@ export async function createQuote(principal: Principal, input: QuoteInput) {
       difficulty: input.difficulty,
       urgent: input.urgent,
       marginPct: input.marginPct ?? 0,
-      // La dificultad y la urgencia no suman puntos: la utilidad es la que se escribe.
+      // La dificultad y la urgencia no suman puntos; la utilidad es un % del precio y la escribe quien cotiza.
       extraMarginPct: 0,
+      marginBasis: "precio",
       ivaPct: input.ivaPct ?? production.ivaPct,
       validDays: input.validDays ?? production.quoteValidDays,
       status: "borrador",
@@ -154,9 +162,9 @@ export async function updateQuote(principal: Principal, id: string, patch: Parti
     for (const key of ["title", "description", "quantity", "difficulty", "urgent", "notes"] as const) {
       if (patch[key] !== undefined) (quote as Record<string, unknown>)[key] = patch[key];
     }
-    // Un borrador hecho con la regla anterior pierde sus puntos de dificultad/urgencia al guardarse;
+    // Un borrador hecho con la regla anterior pasa a la vigente al guardarse (sin puntos, utilidad sobre el precio);
     // una cotización ya enviada conserva su valor para no cambiarle el precio al cliente.
-    if (quote.status === "borrador") quote.extraMarginPct = 0;
+    if (quote.status === "borrador") useCurrentRules(quote);
     if (patch.marginPct !== undefined && patch.marginPct !== null) quote.marginPct = patch.marginPct;
     if (patch.ivaPct !== undefined && patch.ivaPct !== null) quote.ivaPct = patch.ivaPct;
     if (patch.validDays !== undefined && patch.validDays !== null) quote.validDays = patch.validDays;
@@ -188,6 +196,8 @@ export async function setQuoteStatus(principal: Principal, id: string, to: "envi
     const from = quote.status;
     if (to === "enviada") {
       if (quote.materials.length === 0 && quote.labor.length === 0) throw badRequest("Agrega materiales u horas antes de enviarla.");
+      // Al enviarse, el borrador queda con la regla vigente congelada.
+      if (from === "borrador") useCurrentRules(quote);
       quote.issuedAt = nowIso();
       quote.decidedAt = null;
     }

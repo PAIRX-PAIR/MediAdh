@@ -543,6 +543,11 @@ export const quoteSchema = z.object({
   urgent: z.boolean().default(false),
   /** Utilidad base sobre el costo (%). */
   marginPct: z.number().min(0).max(500),
+  /**
+   * precio = la utilidad es ese % del precio que se le da al cliente (precio = costo ÷ (1 − %)).
+   * costo = regla anterior: recargo sobre el costo (costo × (1 + %)). Solo la conservan las cotizaciones ya enviadas.
+   */
+  marginBasis: z.enum(["costo", "precio"]).default("costo"),
   /** Points added to the margin for difficulty and urgency (snapshot of the rules when quoted). */
   extraMarginPct: z.number().min(0).max(1000).default(0),
   ivaPct: z.number().min(0).max(100),

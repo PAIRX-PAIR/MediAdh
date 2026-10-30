@@ -192,7 +192,7 @@ describe("cotizador", () => {
     quantity: 4,
   };
 
-  it("suma costo, utilidad (base + dificultad + urgencia) e IVA en ese orden", () => {
+  it("costo, utilidad (sobre el precio; la regla anterior sobre el costo) e IVA en ese orden", () => {
     const normal = quoteTotals({ ...base, marginPct: 35 });
     expect(normal.materials).toBe(100_000);
     expect(normal.labor).toBe(300_000);
@@ -204,11 +204,18 @@ describe("cotizador", () => {
     expect(normal.unitPrice).toBe(135_000);
     expect(normal.hoursByProcess).toEqual({ torno: 3, fresadora: 1.5 });
 
+    // Utilidad sobre el precio: con 35 %, de cada $100 de precio $35 son utilidad (costo 400.000 → precio 400.000 ÷ 0,65).
+    const onPrice = quoteTotals({ ...base, marginPct: 35, marginBasis: "precio", status: "enviada" });
+    expect(onPrice).toMatchObject({ cost: 400_000, subtotal: 615_385, margin: 215_385, marginPct: 35 });
+    expect(Math.round((onPrice.margin / onPrice.subtotal) * 100)).toBe(35);
+    // Un borrador siempre usa esa regla, aunque guarde la anterior.
+    expect(quoteTotals({ ...base, marginPct: 35, marginBasis: "costo", status: "borrador" }).subtotal).toBe(615_385);
+    expect(quoteTotals({ ...base, marginPct: 0, marginBasis: "precio", status: "enviada" }).subtotal).toBe(400_000);
     // Cotizaciones anteriores a quitar los puntos automáticos conservan su ajuste guardado.
     const difficult = quoteTotals({ ...base, marginPct: 35, extraMarginPct: 15 });
     expect(difficult).toMatchObject({ marginPct: 50, baseMargin: 140_000, extraMargin: 60_000, subtotal: 600_000 });
     // Un borrador con puntos de la regla anterior no los cuenta; una enviada sí los conserva.
-    expect(quoteTotals({ ...base, marginPct: 35, extraMarginPct: 125, status: "borrador" })).toMatchObject({ marginPct: 35, extraMargin: 0, subtotal: 540_000 });
+    expect(quoteTotals({ ...base, marginPct: 35, extraMarginPct: 125, status: "borrador" })).toMatchObject({ marginPct: 35, extraMargin: 0, subtotal: 615_385 });
     expect(quoteTotals({ ...base, marginPct: 35, extraMarginPct: 125, status: "enviada" }).subtotal).toBe(1_040_000);
     // Ajuste guardado de 125 pts: la utilidad sube a 35 + 125 = 160 %.
     const urgent = quoteTotals({ ...base, marginPct: 35, extraMarginPct: 125 });

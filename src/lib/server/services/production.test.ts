@@ -260,12 +260,13 @@ describe("cotizador: solo suma lo que se escribe", () => {
       notes: "",
     });
     // Dificultad muy alta y urgencia no suman puntos; sin utilidad escrita es 0 %.
-    expect(quote).toMatchObject({ marginPct: 0, extraMarginPct: 0 });
+    expect(quote).toMatchObject({ marginPct: 0, extraMarginPct: 0, marginBasis: "precio" });
     const { quoteTotals } = await import("@/lib/domain/quote");
     expect(quoteTotals(quote)).toMatchObject({ cost: 300_000, margin: 0, subtotal: 300_000, iva: 57_000, total: 357_000 });
-    // Con utilidad escrita (10 %) suma exactamente esa.
+    // Con utilidad escrita (10 %), esa parte es del precio: 300.000 ÷ 0,90 = 333.333.
     const updated = await quotes.updateQuote(admin, quote.id, { marginPct: 10 });
-    expect(quoteTotals(updated)).toMatchObject({ margin: 30_000, subtotal: 330_000, total: Math.round(330_000 * 1.19) });
+    expect(quoteTotals(updated)).toMatchObject({ margin: 33_333, subtotal: 333_333, total: 333_333 + Math.round(333_333 * 0.19) });
+    expect(Math.round((33_333 / 333_333) * 100)).toBe(10);
   });
 });
 
@@ -295,8 +296,8 @@ describe("cotizador → orden de trabajo", () => {
     expect(quote.labor[0]!.rate).toBe(50_000);
     await quotes.setQuoteStatus(admin, quote.id, "enviada");
     const { order } = await quotes.approveQuote(admin, quote.id, { due: { date: "2099-02-01", time: "12:00" }, condition: "", machines: {} });
-    // (100.000 + 200.000) × (1 + 0,20) = 360.000 antes de IVA.
-    expect(order.price).toBe(360_000);
+    // Utilidad del 20 % sobre el precio: 300.000 ÷ (1 − 0,20) = 375.000 antes de IVA.
+    expect(order.price).toBe(375_000);
     expect(order.urgent).toBe(true);
     expect(order.workItems[0]).toMatchObject({ process: "torno", plannedHours: 4 });
     expect(order.workItems[0]!.machineId).not.toBeNull();
