@@ -2,7 +2,7 @@
 
 import { CheckCircle2, Copy, FileCheck2, Plus, Printer, Save, Send, Trash2, Undo2, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useSync } from "@/components/providers/sync-provider";
 import { AttachmentGallery, AttachmentUploader } from "@/components/ui/attachments";
 import { ChangeLog, ChangeLogHeading, MoneyInput, NumberInput, Segmented } from "@/components/ui/kit";
@@ -28,6 +28,35 @@ function laborTarget(value: string, machines: Machine[], rates: ProductionSettin
   }
   const process = value.slice(2) as Process;
   return { process, machineId: null, rate: rates?.[process] ?? 0 };
+}
+
+const COMPLETE_MODE_KEY = "smi-cotizacion-completa";
+const subscribeMode = (cb: () => void) => {
+  window.addEventListener("storage", cb);
+  window.addEventListener(COMPLETE_MODE_KEY, cb);
+  return () => {
+    window.removeEventListener("storage", cb);
+    window.removeEventListener(COMPLETE_MODE_KEY, cb);
+  };
+};
+const readMode = () => {
+  try {
+    return localStorage.getItem(COMPLETE_MODE_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
+
+/** Formas de pago de un toque; quedan escritas en «Notas y condiciones», que el cliente ve impresas. */
+const PAY_PREFIX = "Forma de pago: ";
+const PAY_PLANS = ["Contra entrega", "50 % anticipo y 50 % contra entrega", "A 30 días"] as const;
+const paymentOf = (notes: string) => notes.split("\n").find((l) => l.startsWith(PAY_PREFIX))?.slice(PAY_PREFIX.length) ?? "";
+function withPayment(notes: string, plan: string) {
+  const lines = notes.split("\n");
+  const i = lines.findIndex((l) => l.startsWith(PAY_PREFIX));
+  if (i >= 0) lines[i] = PAY_PREFIX + plan;
+  else lines.unshift(PAY_PREFIX + plan);
+  return lines.join("\n").trimEnd();
 }
 
 const STATUS_TONE = { borrador: "neutral", enviada: "glow", aprobada: "done", rechazada: "blocked", vencida: "pending" } as const;
@@ -122,6 +151,17 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
   const totals = quoteTotals({ ...calc, materials: calc.materials.map((m) => ({ ...m, id: m.id ?? "" })) });
   const warnings = quoteWarnings({ ...calc, materials: calc.materials.map((m) => ({ ...m, id: m.id ?? "" })) });
 
+  // Rápida por defecto; quien prefiera todos los campos lo deja elegido en este navegador.
+  const complete = useSyncExternalStore(subscribeMode, readMode, () => false);
+  const chooseMode = (v: "rapida" | "completa") => {
+    try {
+      localStorage.setItem(COMPLETE_MODE_KEY, v === "completa" ? "1" : "0");
+    } catch {
+      /* sin almacenamiento: solo dura esta visita */
+    }
+    window.dispatchEvent(new Event(COMPLETE_MODE_KEY));
+  };
+
   const [commitDate, setCommitDate] = useState(addDays(data.today, 7));
   const commit =
     totals.totalHours > 0 ? canCommit(prod.asOrders, { hoursByProcess: totals.hoursByProcess, dueDate: commitDate, difficulty: form.difficulty, urgent: form.urgent }, prod.ctx) : null;
@@ -157,10 +197,24 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
             {quote.issuedAt && <span>Vigente hasta {formatDate(quoteValidUntil(quote), { day: "numeric", month: "long" })}</span>}
           </span>
         ) : (
-          "Materiales + horas × tarifa de cada máquina, utilidad (con dificultad y urgencia) e IVA."
+          "Materiales y horas por máquina; la utilidad la pones tú (sobre el precio) y se suma el IVA."
         )
       }
     >
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <Segmented<"rapida" | "completa">
+          label="Tipo de cotización"
+          value={complete ? "completa" : "rapida"}
+          onChange={chooseMode}
+          options={[
+            { value: "rapida", label: "Rápida" },
+            { value: "completa", label: "Completa" },
+          ]}
+        />
+        <p className="min-w-0 flex-1 text-sm text-muted">
+          {complete ? "Todos los campos: descripción, IVA, vigencia, notas, planos e historial." : "Solo lo necesario: cliente, trabajo, materiales y horas, utilidad y forma de pago."}
+        </p>
+      </div>
       <div className="grid gap-6 lg:grid-cols-[1fr_21rem]">
         <fieldset disabled={locked} className="flex min-w-0 flex-col gap-5 disabled:opacity-80">
           <Field label="Cliente">
@@ -180,7 +234,7 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
             <Field label="Trabajo">{(id) => <Input id={id} maxLength={140} value={form.title} onChange={(e) => set("title", e.target.value)} />}</Field>
             <Field label="Cantidad">{(id) => <NumberInput id={id} integer min={1} value={form.quantity} onChange={(v) => set("quantity", v ?? 1)} />}</Field>
           </div>
-          <Field label="Descripción para el cliente">{(id) => <Textarea id={id} rows={2} value={form.description} onChange={(e) => set("description", e.target.value)} />}</Field>
+          {complete && <Field label="Descripción para el cliente">{(id) => <Textarea id={id} rows={2} value={form.description} onChange={(e) => set("description", e.target.value)} />}</Field>}
 
           <section>
             <p className="mb-2 text-sm font-medium text-ink-soft">Materiales</p>
@@ -255,12 +309,28 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
             >
               {(id, d) => <NumberInput id={id} ariaDescribedBy={d} value={form.marginPct} onChange={(v) => set("marginPct", v ?? 0)} suffix="%" max={oldRule ? 500 : 99} />}
             </Field>
-            <Field label="IVA">{(id) => <NumberInput id={id} value={form.ivaPct} onChange={(v) => set("ivaPct", v ?? 0)} suffix="%" max={100} />}</Field>
-            <Field label="Vigencia">{(id) => <NumberInput id={id} integer min={1} max={365} value={form.validDays} onChange={(v) => set("validDays", v ?? 15)} suffix="días" />}</Field>
+            {complete && <Field label="IVA">{(id) => <NumberInput id={id} value={form.ivaPct} onChange={(v) => set("ivaPct", v ?? 0)} suffix="%" max={100} />}</Field>}
+            {complete && <Field label="Vigencia">{(id) => <NumberInput id={id} integer min={1} max={365} value={form.validDays} onChange={(v) => set("validDays", v ?? 15)} suffix="días" />}</Field>}
           </div>
-          <Field label="Notas y condiciones">{(id) => <Textarea id={id} rows={2} placeholder="Forma de pago, tiempo de entrega, garantía…" value={form.notes} onChange={(e) => set("notes", e.target.value)} />}</Field>
+          {complete ? (
+            <Field label="Notas y condiciones">{(id) => <Textarea id={id} rows={2} placeholder="Forma de pago, tiempo de entrega, garantía…" value={form.notes} onChange={(e) => set("notes", e.target.value)} />}</Field>
+          ) : (
+            <div>
+              <p className="mb-2 text-sm font-medium text-ink-soft">Forma de pago</p>
+              <Segmented<string>
+                label="Forma de pago"
+                value={paymentOf(form.notes)}
+                onChange={(v) => !locked && set("notes", withPayment(form.notes, v))}
+                options={PAY_PLANS.map((p) => ({ value: p, label: p }))}
+                className="[&>button]:whitespace-normal [&>button]:text-left"
+              />
+              {paymentOf(form.notes) !== "" && !(PAY_PLANS as readonly string[]).includes(paymentOf(form.notes)) && (
+                <p className="mt-2 text-xs text-muted">Esta cotización tiene otra forma de pago («{paymentOf(form.notes)}»). Puedes cambiarla en «Completa».</p>
+              )}
+            </div>
+          )}
 
-          {quote && (
+          {quote && complete && (
             <section>
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-sm font-medium text-ink-soft">Planos del cliente</p>
@@ -269,7 +339,7 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
               <AttachmentGallery items={prod.attachmentsOf(quote.drawingIds)} canRemove={!locked} empty="Sin planos." />
             </section>
           )}
-          {full && (
+          {complete && full && (
             <section>
               <ChangeLogHeading />
               <ChangeLog entries={full.history} />
@@ -323,7 +393,7 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
             </ul>
           )}
 
-          {commit && !locked && (
+          {commit && !locked && complete && (
             <div className="rounded-xl border border-line bg-night/50 p-4">
               <p className="hud-label mb-2">¿Me puedo comprometer?</p>
               <Input type="date" aria-label="Fecha de entrega a ofrecer" min={data.today} value={commitDate} onChange={(e) => setCommitDate(e.target.value)} className="mb-2" />
