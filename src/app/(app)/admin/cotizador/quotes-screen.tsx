@@ -56,7 +56,7 @@ export function QuotesScreen() {
       <PageHeader
         eyebrow="Ventas"
         title="Cotizador"
-        description="Materiales, horas por máquina × tarifa, recargo por dificultad, utilidad e IVA. Una cotización aprobada se vuelve orden de trabajo con un clic."
+        description="Materiales, horas por máquina × tarifa, la utilidad que tú pones e IVA. Una cotización aprobada se vuelve orden de trabajo con un clic."
         actions={
           <Button icon={<Calculator className="size-5" />} onClick={() => setParam({ nueva: "1", c: null })}>
             Nueva cotización

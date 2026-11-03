@@ -1,19 +1,5 @@
-import type { Difficulty, Process, ProductionSettings, Quote, QuoteStatus } from "./schema";
+import type { Process, Quote, QuoteStatus } from "./schema";
 import { addDays } from "./time";
-
-/**
- * Points added to the base margin (S.M.I.: 35 %): +15 for "dificultad mayor",
- * +25 for "muy alta", +125 when the job is urgent and bumps the piece that was
- * mounted on the machine. All values come from Ajustes.
- */
-export function extraMarginPct(
-  difficulty: Difficulty,
-  urgent: boolean,
-  s: Pick<ProductionSettings, "difficultyMarginPct" | "highDifficultyMarginPct" | "urgencyMarginPct">,
-): number {
-  const byDifficulty = difficulty === 3 ? s.highDifficultyMarginPct : difficulty === 2 ? s.difficultyMarginPct : 0;
-  return byDifficulty + (urgent ? s.urgencyMarginPct : 0);
-}
 
 export interface QuoteTotals {
   materials: number;
@@ -23,11 +9,11 @@ export interface QuoteTotals {
   totalHours: number;
   /** Costo directo = materiales + mano de obra. */
   cost: number;
-  /** Utilidad total aplicada (%): base + dificultad + urgencia. */
+  /** Utilidad total aplicada (%): la que se escribe en la cotización (+ el ajuste de una cotización anterior, si lo tiene). */
   marginPct: number;
-  /** Utilidad base en pesos. */
+  /** Utilidad en pesos (la que se escribe en la cotización). */
   baseMargin: number;
-  /** Utilidad adicional por dificultad y urgencia en pesos. */
+  /** Ajuste en pesos de una cotización hecha con la regla anterior (puntos por dificultad/urgencia). Las nuevas siempre en 0. */
   extraMargin: number;
   margin: number;
   /** Precio antes de IVA. */
@@ -40,18 +26,25 @@ export interface QuoteTotals {
 
 const round = (n: number) => Math.round(n);
 
+/** Con la utilidad sobre el precio, 100 % sería un precio infinito: el tope es 99 %. */
+export const MAX_MARGIN_ON_PRICE = 99;
+
 /**
  * Order of operations (all in COP, rounded to whole pesos):
  *   costo     = Σ materiales (cantidad × costo) + Σ horas × tarifa de la máquina
- *   utilidad  = costo × (% base + % dificultad + % urgencia)
- *   subtotal  = costo + utilidad                    (precio antes de IVA)
+ *   subtotal  = costo ÷ (1 − % de utilidad)         (precio antes de IVA)
+ *   utilidad  = subtotal − costo                    (es ese % del precio, no un recargo sobre el costo)
  *   IVA       = subtotal × % IVA
  *   total     = subtotal + IVA
  */
 type TotalsInput = Pick<Quote, "marginPct" | "ivaPct" | "quantity"> & {
   materials: Array<Pick<Quote["materials"][number], "quantity" | "unitCost">>;
   labor: Array<Pick<Quote["labor"][number], "process" | "hours" | "rate">>;
+  /** Solo cotizaciones anteriores a que se quitaran los puntos automáticos; en las nuevas es 0. */
   extraMarginPct?: number;
+  /** Un borrador siempre usa la regla vigente (utilidad sobre el precio, sin puntos); una cotización ya enviada conserva la suya. */
+  status?: QuoteStatus;
+  marginBasis?: Quote["marginBasis"];
 };
 
 export function quoteTotals(q: TotalsInput): QuoteTotals {
@@ -66,6 +59,30 @@ export function quoteTotals(q: TotalsInput): QuoteTotals {
   }
   labor = round(labor);
   const cost = materials + labor;
+  const basis = q.status === "borrador" ? "precio" : (q.marginBasis ?? "costo");
+  if (basis === "precio") {
+    // La utilidad sale del precio: con 30 %, de cada $100 de precio $30 son utilidad y $70 costo.
+    const pct = Math.min(Math.max(q.marginPct, 0), MAX_MARGIN_ON_PRICE);
+    const subtotal = pct > 0 ? round(cost / (1 - pct / 100)) : cost;
+    const margin = subtotal - cost;
+    const iva = round(subtotal * (q.ivaPct / 100));
+    return {
+      materials,
+      labor,
+      hoursByProcess,
+      totalHours: Math.round(totalHours * 100) / 100,
+      cost,
+      marginPct: pct,
+      baseMargin: margin,
+      extraMargin: 0,
+      margin,
+      subtotal,
+      iva,
+      total: subtotal + iva,
+      unitPrice: round(subtotal / Math.max(1, q.quantity)),
+    };
+  }
+  // Regla anterior (cotizaciones ya enviadas): recargo sobre el costo.
   const extra = q.extraMarginPct ?? 0;
   const baseMargin = round(cost * (q.marginPct / 100));
   const margin = round(cost * ((q.marginPct + extra) / 100));

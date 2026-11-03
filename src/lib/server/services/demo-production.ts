@@ -44,7 +44,6 @@ export function demoProduction(ctx: DemoContext) {
 
   // Example tariffs, only for the demo (the real app starts at $0 until the admin sets them).
   settings.production.processRates = { torno: 55_000, fresadora: 65_000, cepillo: 50_000, cnc: 110_000, prensa: 45_000, soldadura: 60_000, banco: 40_000, pintura: 38_000 };
-  settings.production.defaultMarginPct = 35;
 
   const machines: Collection<Machine> = defaultMachines(iso);
   const rates: Record<string, number> = { cnc: 95_000, torno: 48_000, fresadora: 55_000, cepillo: 42_000, prensa: 38_000, soldadura: 50_000, banco: 32_000, pintura: 30_000 };
@@ -379,6 +378,7 @@ export function demoProduction(ctx: DemoContext) {
       difficulty: 1,
       urgent: false,
       marginPct: 35,
+      marginBasis: "precio",
       extraMarginPct: 0,
       ivaPct: 19,
       validDays: 15,
@@ -403,7 +403,6 @@ export function demoProduction(ctx: DemoContext) {
       title: "Corona dentada Z64 módulo 8",
       quantity: 1,
       difficulty: 2,
-      extraMarginPct: 15,
       materials: [{ id: randomUUID(), description: "Disco acero 4140 Ø540×90", quantity: 1, unitCost: 1_350_000 }],
       labor: [labor("torno", 6), labor("cnc", 14), labor("banco", 2)],
       status: "enviada",

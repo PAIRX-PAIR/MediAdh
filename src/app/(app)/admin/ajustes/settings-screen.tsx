@@ -144,21 +144,11 @@ function ProductionSection() {
           </div>
         </div>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Field label="Dificultad mayor" hint="Puntos que se suman a la utilidad.">
-            {(id, d) => <NumberInput id={id} ariaDescribedBy={d} max={500} value={form.difficultyMarginPct} onChange={(v) => set("difficultyMarginPct", v ?? 0)} suffix="pts" />}
-          </Field>
-          <Field label="Dificultad muy alta">
-            {(id) => <NumberInput id={id} max={500} value={form.highDifficultyMarginPct} onChange={(v) => set("highDifficultyMarginPct", v ?? 0)} suffix="pts" />}
-          </Field>
-          <Field label="Urgencia" hint="Se baja la pieza montada en la máquina.">
-            {(id, d) => <NumberInput id={id} ariaDescribedBy={d} max={1000} value={form.urgencyMarginPct} onChange={(v) => set("urgencyMarginPct", v ?? 0)} suffix="pts" />}
-          </Field>
           <Field label="Garantía" hint="Desde la entrega. La soldadura no tiene garantía.">
             {(id, d) => <NumberInput id={id} ariaDescribedBy={d} integer max={3650} value={form.warrantyDays} onChange={(v) => set("warrantyDays", v ?? 0)} suffix="días" />}
           </Field>
         </div>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <Field label="Utilidad por defecto">{(id) => <NumberInput id={id} max={500} value={form.defaultMarginPct} onChange={(v) => set("defaultMarginPct", v ?? 0)} suffix="%" />}</Field>
           <Field label="IVA">{(id) => <NumberInput id={id} max={100} value={form.ivaPct} onChange={(v) => set("ivaPct", v ?? 0)} suffix="%" />}</Field>
           <Field label="Vigencia de cotizaciones">{(id) => <NumberInput id={id} integer min={1} max={365} value={form.quoteValidDays} onChange={(v) => set("quoteValidDays", v ?? 15)} suffix="días" />}</Field>
           <Field label="Cierre automático tras entrega" hint="Días sin reclamos antes de FACTURAR.">
