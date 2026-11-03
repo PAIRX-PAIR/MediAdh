@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSync } from "@/components/providers/sync-provider";
 import { OccupancyList } from "@/components/production/occupancy";
 import { PriorityPanel } from "@/components/production/priority-panel";
+import { ProcessGuide } from "@/components/production/process-guide";
 import { PageHeader, SectionTitle, StatTile } from "@/components/ui/kit";
 import { Chip, cn } from "@/components/ui/primitives";
 import { useProduction } from "@/lib/client/use-production";
@@ -48,6 +49,8 @@ export function CommandScreen() {
           </>
         }
       />
+
+      <ProcessGuide />
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Link href="/admin/ordenes">

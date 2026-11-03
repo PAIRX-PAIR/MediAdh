@@ -2,8 +2,16 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import { CheckCircle2, AlertTriangle, Info, X } from "lucide-react";
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Button, cn } from "./primitives";
+
+const PHONE_QUERY = "(max-width: 639.98px)";
+const subscribePhone = (cb: () => void) => {
+  const mq = window.matchMedia(PHONE_QUERY);
+  mq.addEventListener("change", cb);
+  return () => mq.removeEventListener("change", cb);
+};
+const readPhone = () => window.matchMedia(PHONE_QUERY).matches;
 
 /**
  * Accessible modal built on the native <dialog>: focus trap, Escape to close
@@ -30,6 +38,8 @@ export function Modal({
   dismissible?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  // En el celular la hoja sube con la animación de iOS (CSS del <dialog>); no se le suma el resorte de adentro.
+  const phone = useSyncExternalStore(subscribePhone, readPhone, () => false);
 
   useEffect(() => {
     const dialog = ref.current;
@@ -50,14 +60,14 @@ export function Modal({
         if (dismissible && e.target === ref.current) onClose();
       }}
       className={cn(
-        "m-0 max-h-none max-w-none overflow-visible bg-transparent p-0 text-ink backdrop:bg-abyss/75 backdrop:backdrop-blur-sm",
+        "ios-sheet m-0 max-h-none max-w-none overflow-visible bg-transparent p-0 text-ink backdrop:bg-abyss/75 backdrop:backdrop-blur-sm",
         "fixed inset-x-0 bottom-0 top-auto w-full sm:inset-0 sm:m-auto sm:h-fit",
         { sm: "sm:max-w-md", md: "sm:max-w-lg", lg: "sm:max-w-2xl", xl: "sm:max-w-4xl" }[size],
       )}
     >
       {open && (
         <motion.div
-          initial={{ y: 40, opacity: 0, scale: 0.98 }}
+          initial={phone ? false : { y: 40, opacity: 0, scale: 0.98 }}
           animate={{ y: 0, opacity: 1, scale: 1 }}
           transition={{ type: "spring", stiffness: 380, damping: 32 }}
           className="hud-panel hud-corners safe-bottom flex max-h-[92dvh] flex-col rounded-b-none sm:rounded-b-[var(--radius-hud)]"

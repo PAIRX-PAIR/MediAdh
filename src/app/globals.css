@@ -303,6 +303,29 @@
   }
 }
 
+/*
+ * Hojas como en iOS (celular): el cajón sube con la curva de las hojas del sistema y el fondo se
+ * oscurece suave. Desde sm (tarjeta centrada) se conserva la animación de siempre.
+ */
+@media (max-width: 639.98px) {
+  dialog.ios-sheet[open] {
+    animation: sheet-up 460ms var(--ease-drawer) both;
+  }
+  dialog.ios-sheet[open]::backdrop {
+    animation: sheet-fade 300ms ease-out both;
+  }
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+@keyframes sheet-fade {
+  from {
+    opacity: 0;
+  }
+}
+
 /* Legal documents: plain language, comfortable measure. */
 @layer components {
   .legal h2 {
