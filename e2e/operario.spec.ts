@@ -42,7 +42,7 @@ test.describe("pantallas en el celular", () => {
   test("ninguna pantalla del admin se sale del ancho (sin espacio vacío al deslizar)", async ({ page }) => {
     await signIn(page, ADMIN);
     await expect(page).toHaveURL(/\/admin$/);
-    for (const path of ["/admin", "/admin/ordenes", "/admin/cola", "/admin/cotizador", "/admin/finanzas", "/admin/nomina", "/admin/equipo", "/admin/ajustes", "/admin/dispositivos"]) {
+    for (const path of ["/admin", "/admin/ordenes", "/admin/taller", "/admin/programacion", "/admin/maquinas", "/admin/produccion", "/admin/cotizador", "/admin/finanzas", "/admin/nomina", "/admin/equipo", "/admin/ajustes", "/admin/dispositivos"]) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       const { scroll, client, culprits } = await page.evaluate(() => {

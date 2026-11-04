@@ -226,7 +226,7 @@ export async function updateMachine(principal: Principal, id: string, patch: Mac
           type: "machine_status",
           title: to === "mantenimiento" ? `${machine.name} en mantenimiento` : `${machine.name} ${MACHINE_STATE_LABEL[to].toLowerCase()}`,
           body: to === "mantenimiento" ? `${patch.stopReason?.trim() || "Paro de mantenimiento"}. Su capacidad sale de la planeación.` : message,
-          link: "/admin/cola",
+          link: "/admin/maquinas",
         }),
       );
       if (machine.positionId) {

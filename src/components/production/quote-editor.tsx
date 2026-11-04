@@ -395,7 +395,7 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
 
           {commit && !locked && complete && (
             <div className="rounded-xl border border-line bg-night/50 p-4">
-              <p className="hud-label mb-2">¿Me puedo comprometer?</p>
+              <p className="hud-label mb-2">Programación</p>
               <Input type="date" aria-label="Fecha de entrega a ofrecer" min={data.today} value={commitDate} onChange={(e) => setCommitDate(e.target.value)} className="mb-2" />
               <CommitVerdict answer={commit} compact />
             </div>

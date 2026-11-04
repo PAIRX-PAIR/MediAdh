@@ -11,7 +11,7 @@ const STYLE = {
   no: { icon: XCircle, label: "No", box: "border-blocked/40 bg-blocked/10", text: "text-blocked" },
 } as const;
 
-/** The answer to "¿Me puedo comprometer?" with its explanation (icon + label, never color alone). */
+/** The answer of Programación (can the date be met?) with its explanation (icon + label, never color alone). */
 export function CommitVerdict({ answer, compact = false }: { answer: CommitAnswer; compact?: boolean }) {
   const s = STYLE[answer.verdict];
   const Icon = s.icon;
