@@ -37,7 +37,7 @@ function fromOrder(o: OrderView): OrderInput {
 
 /**
  * Intake of pieces (new OT) or edit of an existing one. While the route and
- * the due date are filled in, the form answers "¿Me puedo comprometer?" live.
+ * the due date are filled in, the form answers "Programación" (can the date be met?) live.
  */
 export function OrderFormModal({ order, onClose, onSaved }: { order?: OrderView | null; onClose: () => void; onSaved?: (order: Order) => void }) {
   const { data } = useSync();
@@ -161,7 +161,7 @@ export function OrderFormModal({ order, onClose, onSaved }: { order?: OrderView 
             <p className="mt-2 text-xs text-muted">Se avisa 24 h antes, el mismo día y si se vence.</p>
             {answer && (
               <div className="mt-3">
-                <p className="hud-label mb-1.5">¿Me puedo comprometer?</p>
+                <p className="hud-label mb-1.5">Programación</p>
                 <CommitVerdict answer={answer} />
               </div>
             )}

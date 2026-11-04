@@ -368,7 +368,7 @@ describe("cola de producción", () => {
   });
 });
 
-describe("¿Me puedo comprometer?", () => {
+describe("Programación: ¿se puede cumplir la fecha?", () => {
   it("responde Sí cuando cabe después de la cola", () => {
     const answer = canCommit([orderA(), orderB()], { hoursByProcess: { torno: 12 }, dueDate: "2026-10-15" }, ctx());
     expect(answer.verdict).toBe("si");

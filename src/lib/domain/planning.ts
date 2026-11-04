@@ -5,7 +5,7 @@ import { addDays, daysBetween, zonedInstant } from "./time";
 /**
  * Production planning: finite-capacity list scheduling of the open work items
  * on the workshop machines, queue occupancy, an explainable priority advisor
- * and the "¿Me puedo comprometer?" simulator.
+ * and the "Programación" simulator (antes «¿Me puedo comprometer?»).
  *
  * Simplifications (documented for the boss, all adjustable later):
  * - Process steps of one order may run in parallel on different machines.
@@ -519,7 +519,7 @@ export function nextUp(ranking: PriorityItem[]): PriorityItem | null {
 
 const fmtH = (h: number) => `${round1(h)} h`;
 
-/* ───────────────────────── ¿Me puedo comprometer? ───────────────────────── */
+/* ───────────────────────── Programación (antes «¿Me puedo comprometer?») ───────────────────────── */
 
 export interface CommitRequest {
   /** Hours per process (the scheduler picks the machine) … */
