@@ -380,6 +380,8 @@ export function demoProduction(ctx: DemoContext) {
       marginPct: 35,
       marginBasis: "precio",
       extraMarginPct: 0,
+      discountKind: "pct",
+      discountValue: 0,
       ivaPct: 19,
       validDays: 15,
       status: "borrador",

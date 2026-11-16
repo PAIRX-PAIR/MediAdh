@@ -23,6 +23,8 @@ export interface QuoteInput {
   marginPct: number | null;
   ivaPct: number | null;
   validDays: number | null;
+  discountKind?: "pct" | "valor";
+  discountValue?: number;
   notes: string;
 }
 
@@ -36,6 +38,7 @@ const QUOTE_LABELS = {
   marginPct: "Utilidad %",
   ivaPct: "IVA %",
   validDays: "Vigencia (días)",
+  discountValue: "Descuento",
   status: "Estado",
   notes: "Notas",
 } as const;
@@ -128,6 +131,8 @@ export async function createQuote(principal: Principal, input: QuoteInput) {
       marginBasis: "precio",
       ivaPct: input.ivaPct ?? production.ivaPct,
       validDays: input.validDays ?? production.quoteValidDays,
+      discountKind: input.discountKind ?? "pct",
+      discountValue: input.discountValue ?? 0,
       status: "borrador",
       issuedAt: null,
       decidedAt: null,
@@ -168,6 +173,8 @@ export async function updateQuote(principal: Principal, id: string, patch: Parti
     if (patch.marginPct !== undefined && patch.marginPct !== null) quote.marginPct = patch.marginPct;
     if (patch.ivaPct !== undefined && patch.ivaPct !== null) quote.ivaPct = patch.ivaPct;
     if (patch.validDays !== undefined && patch.validDays !== null) quote.validDays = patch.validDays;
+    if (patch.discountKind !== undefined) quote.discountKind = patch.discountKind;
+    if (patch.discountValue !== undefined) quote.discountValue = patch.discountValue;
     if (patch.materials !== undefined || patch.labor !== undefined) {
       const next = lines(
         { materials: patch.materials ?? quote.materials, labor: patch.labor ?? quote.labor },

@@ -16,7 +16,11 @@ export interface QuoteTotals {
   /** Ajuste en pesos de una cotización hecha con la regla anterior (puntos por dificultad/urgencia). Las nuevas siempre en 0. */
   extraMargin: number;
   margin: number;
-  /** Precio antes de IVA. */
+  /** Precio de lista antes de descuento e IVA. */
+  listSubtotal: number;
+  /** Descuento acordado con el cliente, en pesos (sale antes del IVA). */
+  discount: number;
+  /** Precio antes de IVA, ya con el descuento. */
   subtotal: number;
   iva: number;
   total: number;
@@ -45,7 +49,18 @@ type TotalsInput = Pick<Quote, "marginPct" | "ivaPct" | "quantity"> & {
   /** Un borrador siempre usa la regla vigente (utilidad sobre el precio, sin puntos); una cotización ya enviada conserva la suya. */
   status?: QuoteStatus;
   marginBasis?: Quote["marginBasis"];
+  /** Descuento sobre el precio de lista: en % o en pesos. Ausente = sin descuento. */
+  discountKind?: Quote["discountKind"];
+  discountValue?: number;
 };
+
+/** Descuento en pesos, sin pasar del precio de lista. */
+function discountOf(q: TotalsInput, listSubtotal: number): number {
+  const value = Math.max(0, q.discountValue ?? 0);
+  if (value === 0) return 0;
+  const amount = q.discountKind === "valor" ? value : (listSubtotal * value) / 100;
+  return Math.min(listSubtotal, round(amount));
+}
 
 export function quoteTotals(q: TotalsInput): QuoteTotals {
   const materials = round(q.materials.reduce((sum, m) => sum + m.quantity * m.unitCost, 0));
@@ -63,8 +78,10 @@ export function quoteTotals(q: TotalsInput): QuoteTotals {
   if (basis === "precio") {
     // La utilidad sale del precio: con 30 %, de cada $100 de precio $30 son utilidad y $70 costo.
     const pct = Math.min(Math.max(q.marginPct, 0), MAX_MARGIN_ON_PRICE);
-    const subtotal = pct > 0 ? round(cost / (1 - pct / 100)) : cost;
-    const margin = subtotal - cost;
+    const listSubtotal = pct > 0 ? round(cost / (1 - pct / 100)) : cost;
+    const margin = listSubtotal - cost;
+    const discount = discountOf(q, listSubtotal);
+    const subtotal = listSubtotal - discount;
     const iva = round(subtotal * (q.ivaPct / 100));
     return {
       materials,
@@ -76,6 +93,8 @@ export function quoteTotals(q: TotalsInput): QuoteTotals {
       baseMargin: margin,
       extraMargin: 0,
       margin,
+      listSubtotal,
+      discount,
       subtotal,
       iva,
       total: subtotal + iva,
@@ -86,7 +105,9 @@ export function quoteTotals(q: TotalsInput): QuoteTotals {
   const extra = q.extraMarginPct ?? 0;
   const baseMargin = round(cost * (q.marginPct / 100));
   const margin = round(cost * ((q.marginPct + extra) / 100));
-  const subtotal = cost + margin;
+  const listSubtotal = cost + margin;
+  const discount = discountOf(q, listSubtotal);
+  const subtotal = listSubtotal - discount;
   const iva = round(subtotal * (q.ivaPct / 100));
   return {
     materials,
@@ -98,6 +119,8 @@ export function quoteTotals(q: TotalsInput): QuoteTotals {
     baseMargin,
     extraMargin: margin - baseMargin,
     margin,
+    listSubtotal,
+    discount,
     subtotal,
     iva,
     total: subtotal + iva,

@@ -192,6 +192,19 @@ describe("cotizador", () => {
     quantity: 4,
   };
 
+  it("el descuento baja el precio antes del IVA, en % o en pesos, y nunca pasa del precio de lista", () => {
+    const list = { ...base, marginPct: 0, marginBasis: "precio" as const, status: "enviada" as const };
+    // Lista 400.000 (costo sin utilidad).
+    const pct = quoteTotals({ ...list, discountKind: "pct", discountValue: 10 });
+    expect(pct).toMatchObject({ listSubtotal: 400_000, discount: 40_000, subtotal: 360_000, iva: 68_400, total: 428_400 });
+    const pesos = quoteTotals({ ...list, discountKind: "valor", discountValue: 50_000 });
+    expect(pesos).toMatchObject({ discount: 50_000, subtotal: 350_000, iva: 66_500, total: 416_500 });
+    // Sin descuento (cotizaciones anteriores) no cambia nada.
+    expect(quoteTotals(list)).toMatchObject({ listSubtotal: 400_000, discount: 0, subtotal: 400_000, total: 476_000 });
+    // Un descuento mayor que el precio se topa en el precio de lista.
+    expect(quoteTotals({ ...list, discountKind: "valor", discountValue: 999_999_999 })).toMatchObject({ discount: 400_000, subtotal: 0, total: 0 });
+  });
+
   it("costo, utilidad (sobre el precio; la regla anterior sobre el costo) e IVA en ese orden", () => {
     const normal = quoteTotals({ ...base, marginPct: 35 });
     expect(normal.materials).toBe(100_000);
