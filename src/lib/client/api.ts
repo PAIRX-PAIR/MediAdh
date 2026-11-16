@@ -259,6 +259,8 @@ export interface QuoteInput {
   marginPct: number | null;
   ivaPct: number | null;
   validDays: number | null;
+  discountKind: "pct" | "valor";
+  discountValue: number;
   notes: string;
 }
 

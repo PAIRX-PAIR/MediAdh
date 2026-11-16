@@ -550,6 +550,9 @@ export const quoteSchema = z.object({
   marginBasis: z.enum(["costo", "precio"]).default("costo"),
   /** Points added to the margin for difficulty and urgency (snapshot of the rules when quoted). */
   extraMarginPct: z.number().min(0).max(1000).default(0),
+  /** Descuento acordado con el cliente: en % o en pesos, sobre el precio de lista y antes del IVA. */
+  discountKind: z.enum(["pct", "valor"]).default("pct"),
+  discountValue: z.number().min(0).max(100000000).default(0),
   ivaPct: z.number().min(0).max(100),
   validDays: z.number().int().min(1).max(365),
   status: z.enum(QUOTE_STATUSES),

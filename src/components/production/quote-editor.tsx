@@ -84,6 +84,8 @@ function toInput(q: QuoteView): QuoteInput {
     marginPct: q.marginPct,
     ivaPct: q.ivaPct,
     validDays: q.validDays,
+    discountKind: q.discountKind,
+    discountValue: q.discountValue,
     notes: q.notes,
   };
 }
@@ -110,6 +112,8 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
           marginPct: 0,
           ivaPct: prod.settings?.ivaPct ?? 19,
           validDays: prod.settings?.quoteValidDays ?? 15,
+          discountKind: "pct",
+          discountValue: 0,
           notes: "",
         },
   );
@@ -147,6 +151,8 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
     marginBasis: quote?.marginBasis,
     ivaPct: form.ivaPct ?? 19,
     quantity: form.quantity,
+    discountKind: form.discountKind,
+    discountValue: form.discountValue,
   };
   const totals = quoteTotals({ ...calc, materials: calc.materials.map((m) => ({ ...m, id: m.id ?? "" })) });
   const warnings = quoteWarnings({ ...calc, materials: calc.materials.map((m) => ({ ...m, id: m.id ?? "" })) });
@@ -312,6 +318,29 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
             {complete && <Field label="IVA">{(id) => <NumberInput id={id} value={form.ivaPct} onChange={(v) => set("ivaPct", v ?? 0)} suffix="%" max={100} />}</Field>}
             {complete && <Field label="Vigencia">{(id) => <NumberInput id={id} integer min={1} max={365} value={form.validDays} onChange={(v) => set("validDays", v ?? 15)} suffix="días" />}</Field>}
           </div>
+          <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
+            <Field label="Descuento al cliente" hint="Se descuenta del precio antes del IVA. Déjalo en 0 si no hay descuento.">
+              {(id, d) => (
+                <NumberInput
+                  id={id}
+                  ariaDescribedBy={d}
+                  value={form.discountValue}
+                  onChange={(v) => set("discountValue", v ?? 0)}
+                  suffix={form.discountKind === "pct" ? "%" : "$"}
+                  max={form.discountKind === "pct" ? 100 : undefined}
+                />
+              )}
+            </Field>
+            <Segmented<"pct" | "valor">
+              label="Tipo de descuento"
+              value={form.discountKind}
+              onChange={(v) => set("discountKind", v)}
+              options={[
+                { value: "pct", label: "%" },
+                { value: "valor", label: "$" },
+              ]}
+            />
+          </div>
           {complete ? (
             <Field label="Notas y condiciones">{(id) => <Textarea id={id} rows={2} placeholder="Forma de pago, tiempo de entrega, garantía…" value={form.notes} onChange={(e) => set("notes", e.target.value)} />}</Field>
           ) : (
@@ -376,6 +405,7 @@ export function QuoteEditorModal({ quote, onClose, onCreated }: { quote: QuoteVi
             <Row label="Costo directo" value={formatCop(totals.cost)} strong />
             <Row label={oldRule ? `Utilidad ${form.marginPct ?? 0} % sobre costo` : `Utilidad ${totals.marginPct} % del precio`} value={formatCop(totals.baseMargin)} />
             {totals.extraMargin > 0 && <Row label={`Ajuste de la regla anterior +${extra} pts`} value={formatCop(totals.extraMargin)} />}
+            {totals.discount > 0 && <Row label={form.discountKind === "pct" ? `Descuento ${form.discountValue} %` : "Descuento"} value={`− ${formatCop(totals.discount)}`} />}
             <Row label="Subtotal (antes de IVA)" value={formatCop(totals.subtotal)} strong />
             <Row label={`IVA ${form.ivaPct ?? 0} %`} value={formatCop(totals.iva)} />
             <div className="mt-1 flex items-baseline justify-between border-t border-line pt-2">

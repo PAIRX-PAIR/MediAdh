@@ -99,6 +99,18 @@ export default async function PrintQuote({ params }: { params: Promise<{ id: str
         </table>
 
         <dl className="ml-auto mt-6 w-72 text-sm tabular-nums">
+          {t.discount > 0 && (
+            <>
+              <div className="flex justify-between py-1">
+                <dt>Precio de lista</dt>
+                <dd>{formatCop(t.listSubtotal)}</dd>
+              </div>
+              <div className="flex justify-between py-1">
+                <dt>Descuento{quote.discountKind === "pct" ? ` (${quote.discountValue} %)` : ""}</dt>
+                <dd>− {formatCop(t.discount)}</dd>
+              </div>
+            </>
+          )}
           <div className="flex justify-between py-1">
             <dt>Subtotal</dt>
             <dd>{formatCop(t.subtotal)}</dd>

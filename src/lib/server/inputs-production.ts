@@ -197,6 +197,8 @@ export const quoteInput = z.object({
   marginPct: z.union([z.number().min(0).max(99), z.null()]).default(null),
   ivaPct: z.union([z.number().min(0).max(100), z.null()]).default(null),
   validDays: z.union([z.number().int().min(1).max(365), z.null()]).default(null),
+  discountKind: z.enum(["pct", "valor"]).default("pct"),
+  discountValue: z.number().min(0).max(100000000).default(0),
   notes: longText(2000),
 });
 
@@ -214,6 +216,8 @@ export const quotePatchInput = z
     marginPct: z.number().min(0).max(99),
     ivaPct: z.number().min(0).max(100),
     validDays: z.number().int().min(1).max(365),
+    discountKind: z.enum(["pct", "valor"]),
+    discountValue: z.number().min(0).max(100000000),
     notes: text(2000),
   })
   .partial()
