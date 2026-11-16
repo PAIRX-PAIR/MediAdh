@@ -18,6 +18,9 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
 /** Statuses from which the work is no longer in the workshop's hands. */
 export const DELIVERED_STATUSES: OrderStatus[] = ["entregada", "cerrada"];
 
+/** Delivered orders stay in the live payload this long; older ones load from the archive (Histórico). */
+export const ORDER_WINDOW_DAYS = 120;
+
 /** Legal next statuses (manual changes from the console). */
 export const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   recibida: ["en_proceso", "terminada", "cancelada"],

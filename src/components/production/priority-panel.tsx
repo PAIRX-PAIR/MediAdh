@@ -10,6 +10,10 @@ import type { PriorityItem } from "@/lib/domain/planning";
 /** "Sigue con OT-xxxx" + the explainable ranking (every point has a reason). */
 export function PriorityPanel({ ranking, next, hrefFor, limit = 6 }: { ranking: PriorityItem[]; next: PriorityItem | null; hrefFor: (orderId: string) => string; limit?: number }) {
   const [open, setOpen] = useState<string | null>(null);
+  // Al inicio se ve un resumen, pero siempre se puede abrir la lista completa: nunca se esconden órdenes sin avisar.
+  const [all, setAll] = useState(false);
+  const shown = all ? ranking : ranking.slice(0, limit);
+  const hidden = ranking.length - shown.length;
   if (ranking.length === 0) {
     return (
       <section className="hud-panel p-5">
@@ -51,9 +55,11 @@ export function PriorityPanel({ ranking, next, hrefFor, limit = 6 }: { ranking: 
         </div>
       )}
       <div>
-        <p className="hud-label mb-2">Orden recomendado</p>
+        <p className="hud-label mb-2">
+          Orden recomendado · {shown.length === ranking.length ? `${ranking.length} ${ranking.length === 1 ? "orden" : "órdenes"}` : `${shown.length} de ${ranking.length}`}
+        </p>
         <ol className="flex flex-col gap-1">
-          {ranking.slice(0, limit).map((r, i) => {
+          {shown.map((r, i) => {
             const expanded = open === r.orderId;
             return (
               <li key={r.orderId}>
@@ -99,6 +105,17 @@ export function PriorityPanel({ ranking, next, hrefFor, limit = 6 }: { ranking: 
             );
           })}
         </ol>
+        {ranking.length > limit && (
+          <button
+            type="button"
+            aria-expanded={all}
+            onClick={() => setAll((v) => !v)}
+            className="mt-2 inline-flex h-10 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-glow hover:underline"
+          >
+            {all ? "Ver menos" : `Ver las ${ranking.length} órdenes (${hidden} más)`}
+            <ChevronDown className={cn("size-4 transition-transform", all && "rotate-180")} aria-hidden />
+          </button>
+        )}
       </div>
     </section>
   );

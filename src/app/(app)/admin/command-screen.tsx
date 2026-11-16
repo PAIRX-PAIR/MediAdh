@@ -3,8 +3,6 @@
 import { AlertOctagon, AlertTriangle, ArrowRight, Calculator, CalendarCheck2, ClipboardPlus, Info, Layers, PackageOpen, Receipt, Scale, Wrench } from "lucide-react";
 import Link from "next/link";
 import { useSync } from "@/components/providers/sync-provider";
-import { OccupancyList } from "@/components/production/occupancy";
-import { PriorityPanel } from "@/components/production/priority-panel";
 import { ProcessGuide } from "@/components/production/process-guide";
 import { PageHeader, SectionTitle, StatTile } from "@/components/ui/kit";
 import { Chip, cn } from "@/components/ui/primitives";
@@ -40,8 +38,8 @@ export function CommandScreen() {
             <Link href="/admin/cotizador?nueva=1" className="inline-flex h-11 items-center gap-2 rounded-xl border border-line-strong px-4 font-display text-sm font-semibold text-ink-soft hover:border-glow/60 hover:text-ink">
               <Calculator className="size-4" aria-hidden /> Cotizar
             </Link>
-            <Link href="/admin/cola#comprometer" className="inline-flex h-11 items-center gap-2 rounded-xl border border-line-strong px-4 font-display text-sm font-semibold text-ink-soft hover:border-glow/60 hover:text-ink">
-              <Scale className="size-4" aria-hidden /> ¿Me comprometo?
+            <Link href="/admin/programacion#comprometer" className="inline-flex h-11 items-center gap-2 rounded-xl border border-line-strong px-4 font-display text-sm font-semibold text-ink-soft hover:border-glow/60 hover:text-ink">
+              <Scale className="size-4" aria-hidden /> Programación
             </Link>
             <Link href="/admin/ordenes?nueva=1" className="inline-flex h-11 items-center gap-2 rounded-xl border border-glow/40 bg-gradient-to-b from-navy-400 to-navy-600 px-4 font-display text-sm font-semibold text-white shadow-glow">
               <ClipboardPlus className="size-4" aria-hidden /> Nueva OT
@@ -73,8 +71,7 @@ export function CommandScreen() {
         </Link>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.35fr_1fr]">
-        <PriorityPanel ranking={prod.ranking} next={prod.next} hrefFor={(id) => `/admin/ordenes?o=${id}`} />
+      <div>
         <section className="hud-panel flex flex-col gap-3 p-5" aria-labelledby="alertas-title">
           <h2 id="alertas-title" className="font-display text-lg font-semibold text-ink">
             Alertas
@@ -107,19 +104,6 @@ export function CommandScreen() {
           )}
         </section>
       </div>
-
-      <section aria-labelledby="maquinas-title">
-        <SectionTitle
-          action={
-            <Link href="/admin/cola" className="inline-flex items-center gap-1 text-sm font-semibold text-glow hover:underline">
-              Ver cola <ArrowRight className="size-4" aria-hidden />
-            </Link>
-          }
-        >
-          <span id="maquinas-title">Máquinas · próximas 2 semanas</span>
-        </SectionTitle>
-        <OccupancyList items={prod.occupancy} />
-      </section>
 
       <section aria-labelledby="puestos-title">
         <SectionTitle

@@ -1,7 +1,6 @@
-import { QueueScreen } from "./queue-screen";
+import { redirect } from "next/navigation";
 
-export const metadata = { title: "Cola de producción" };
-
+/** Ruta anterior: la cola por máquina ahora es «Programación» (y la ocupación, «Máquinas»). Se conserva para los enlaces y marcadores viejos. */
 export default function QueuePage() {
-  return <QueueScreen />;
+  redirect("/admin/programacion");
 }

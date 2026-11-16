@@ -13,6 +13,8 @@ test.describe("consola del coordinador", () => {
   test("el mando recomienda con qué orden seguir y explica por qué", async ({ page }) => {
     const errors = watchConsole(page);
     await expect(page.getByRole("heading", { level: 1, name: /Buen(os|as) (días|tardes|noches)/ })).toBeVisible();
+    // «Sigue con» vive en Producción (el Inicio ya no repite el panel).
+    await page.goto("/admin/produccion");
     await expect(page.getByText("Sigue con", { exact: true })).toBeVisible();
     await expect(page.getByText(/OT-\d{4}/).first()).toBeVisible();
     await page.getByRole("button", { name: /OT-\d{4}/ }).first().click();
@@ -27,7 +29,7 @@ test.describe("consola del coordinador", () => {
     await form.getByLabel("Nombre del cliente sin registrar").fill("Taller de prueba e2e");
     await form.getByLabel("Trabajo").fill("Buje de prueba e2e");
     await form.getByRole("button", { name: "Agregar paso" }).click();
-    await expect(form.getByText("¿Me puedo comprometer?").first()).toBeVisible();
+    await expect(form.getByText("Programación", { exact: true }).first()).toBeVisible();
     await form.getByRole("button", { name: "Registrar OT" }).click();
     // The detail opens on the files tab to add photos and drawings.
     await expect(page.getByRole("dialog").getByRole("heading", { name: /OT-\d{4} · Buje de prueba e2e/ })).toBeVisible();
@@ -36,13 +38,37 @@ test.describe("consola del coordinador", () => {
     await expect(page.getByText(/Torno · Pinacho/)).toBeVisible();
   });
 
-  test("la cola muestra la carga por máquina y responde ¿me puedo comprometer?", async ({ page }) => {
+  test("Programación responde si la fecha se puede cumplir y /admin/cola sigue llevando ahí", async ({ page }) => {
     await page.goto("/admin/cola");
-    await expect(page.getByRole("heading", { level: 1, name: "Cola por máquina" })).toBeVisible();
-    await expect(page.getByRole("img", { name: /Carga diaria de CNC¹ Leadwell/ })).toBeVisible();
+    await expect(page).toHaveURL(/\/admin\/programacion$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Programación" })).toBeVisible();
     const sim = page.locator("#comprometer");
     await sim.getByLabel("Torno").fill("4");
     await expect(sim.getByRole("status")).toContainText(/Sí|No/);
+  });
+
+  test("Máquinas muestra la ocupación y la carga diaria por máquina", async ({ page }) => {
+    await page.goto("/admin/maquinas");
+    await expect(page.getByRole("heading", { level: 1, name: "Máquinas" })).toBeVisible();
+    await page.getByText("Carga diaria por máquina").click();
+    await expect(page.getByRole("img", { name: /Carga diaria de CNC¹ Leadwell/ })).toBeVisible();
+  });
+
+  test("las cuatro secciones del Taller tienen su pestaña y su pantalla", async ({ page }) => {
+    await page.goto("/admin/programacion");
+    const tabs = page.getByRole("navigation", { name: "Secciones del Taller" });
+    const sections = [
+      { name: "Órdenes de trabajo", href: "/admin/ordenes" },
+      { name: "Máquinas", href: "/admin/maquinas" },
+      { name: "Producción", href: "/admin/produccion" },
+      { name: "Programación", href: "/admin/programacion" },
+    ];
+    for (const { name, href } of sections) {
+      await expect(tabs.getByRole("link", { name })).toHaveAttribute("href", href);
+      // La pestaña apunta a la pantalla correcta: se abre por su dirección y muestra su título.
+      await page.goto(href);
+      await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+    }
   });
 
   test("el cotizador calcula en vivo y se puede imprimir", async ({ page }) => {

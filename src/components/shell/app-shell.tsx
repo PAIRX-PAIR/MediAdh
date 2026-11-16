@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { AlertOctagon, Bell, CheckCheck, LogOut, Megaphone, Menu, Wifi, WifiOff, X } from "lucide-react";
+import { AlertOctagon, Bell, CheckCheck, Ellipsis, LogOut, Megaphone, Menu, Wifi, WifiOff, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState, type ReactNode } from "react";
@@ -44,7 +44,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   const primary = nav.filter((n) => n.primary).slice(0, 5);
-  const isActive = (href: string) => (href === "/admin" || href === "/panel" ? pathname === href : pathname.startsWith(href));
+  // El menú lateral no repite lo que solo existe en el celular; «Más» no repite lo que ya está abajo ni las secciones del Taller.
+  const sidebar = nav.filter((n) => !n.mobileOnly);
+  const more = data.me.isAdmin ? nav.filter((n) => !n.primary && n.group !== "Taller") : [];
+  const moreCount = more.reduce((sum, n) => sum + (n.badge?.(data) ?? 0), 0);
+  const isActive = (item: NavItem) => {
+    const paths = item.match ?? [item.href];
+    return paths.some((p) => (p === "/admin" || p === "/panel" ? pathname === p : pathname.startsWith(p)));
+  };
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -63,7 +70,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           className="sticky top-[76px] hidden h-[calc(100dvh-96px)] w-60 shrink-0 flex-col gap-1 overflow-y-auto overscroll-contain py-6 [scrollbar-width:thin] lg:flex"
           aria-label="Navegación principal"
         >
-          <GroupedNav nav={nav} isActive={isActive} />
+          <GroupedNav nav={sidebar} isActive={isActive} />
           <div className="mt-auto pt-4">
             <SignOutButton />
           </div>
@@ -82,14 +89,19 @@ export function AppShell({ children }: { children: ReactNode }) {
         <ul className="mx-auto grid max-w-lg grid-cols-5">
           {primary.map((item) => (
             <li key={item.href}>
-              <BottomLink item={item} active={isActive(item.href)} />
+              <BottomLink item={item} active={isActive(item)} />
             </li>
           ))}
+          {data.me.isAdmin && (
+            <li>
+              <MoreButton active={menu} count={moreCount} onClick={() => setMenuOpenedAt(pathname)} />
+            </li>
+          )}
         </ul>
       </nav>
 
       <NotificationDrawer open={drawer} onClose={() => setDrawer(false)} />
-      <MobileMenu open={menu} onClose={() => setMenuOpenedAt(null)} nav={nav} isActive={isActive} />
+      <MobileMenu open={menu} onClose={() => setMenuOpenedAt(null)} nav={data.me.isAdmin ? more : nav} isActive={isActive} />
       <NotificationPopups />
     </div>
   );
@@ -242,12 +254,34 @@ function BottomLink({ item, active }: { item: NavItem; active: boolean }) {
           </span>
         )}
       </span>
-      {item.label}
+      {item.mobileLabel ?? item.label}
     </Link>
   );
 }
 
-function GroupedNav({ nav, isActive }: { nav: NavItem[]; isActive: (href: string) => boolean }) {
+/** «Más»: abre las funciones administrativas secundarias (Gestión, Equipo, Sistema). */
+function MoreButton({ active, count, onClick }: { active: boolean; count: number; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-haspopup="dialog"
+      className={cn("relative flex h-[64px] w-full flex-col items-center justify-center gap-1 text-[11px] font-semibold tracking-wide", active ? "text-glow" : "text-muted")}
+    >
+      <span className="relative">
+        <Ellipsis className="size-6" />
+        {count > 0 && (
+          <span className="absolute -right-2.5 -top-1.5 grid min-w-[18px] place-items-center rounded-full bg-urgent px-1 font-mono text-[10px] font-bold text-white">
+            {count > 9 ? "9+" : count}
+          </span>
+        )}
+      </span>
+      Más
+    </button>
+  );
+}
+
+function GroupedNav({ nav, isActive }: { nav: NavItem[]; isActive: (item: NavItem) => boolean }) {
   const groups: Array<[string | undefined, NavItem[]]> = [];
   for (const item of nav) {
     const last = groups[groups.length - 1];
@@ -260,7 +294,7 @@ function GroupedNav({ nav, isActive }: { nav: NavItem[]; isActive: (href: string
         <div key={group ?? i} className="flex flex-col gap-0.5">
           {group && <p className={cn("hud-label px-3 pb-1 text-[0.65rem]", i > 0 && "pt-4")}>{group}</p>}
           {items.map((item) => (
-            <NavLink key={item.href} item={item} active={isActive(item.href)} />
+            <NavLink key={item.href} item={item} active={isActive(item)} />
           ))}
         </div>
       ))}
@@ -268,9 +302,9 @@ function GroupedNav({ nav, isActive }: { nav: NavItem[]; isActive: (href: string
   );
 }
 
-function MobileMenu({ open, onClose, nav, isActive }: { open: boolean; onClose: () => void; nav: NavItem[]; isActive: (href: string) => boolean }) {
+function MobileMenu({ open, onClose, nav, isActive }: { open: boolean; onClose: () => void; nav: NavItem[]; isActive: (item: NavItem) => boolean }) {
   return (
-    <Modal open={open} onClose={onClose} title="Menú" size="sm">
+    <Modal open={open} onClose={onClose} title="Más" size="sm">
       <div className="flex flex-col gap-1">
         <GroupedNav nav={nav} isActive={isActive} />
         <div className="mt-3 border-t border-line pt-3">

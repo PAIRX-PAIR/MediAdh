@@ -2,12 +2,10 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { activeHolderId, contractStatus } from "@/lib/domain/contracts";
 import type { Attachment, Database, Machine, Order, Position, Settings, Task } from "@/lib/domain/schema";
-import { isLate } from "@/lib/domain/lifecycle";
+import { isLate, ORDER_WINDOW_DAYS } from "@/lib/domain/lifecycle";
 import { addDays, daysBetween } from "@/lib/domain/time";
 import type { AlertView, AttachmentView, OrderBrief, PositionView, ProductionPayload, PublicInfo, SettingsView, SyncPayload, UserView } from "@/lib/domain/views";
 
-/** Delivered orders stay in the live payload this long; older ones load from the archive. */
-const ORDER_WINDOW_DAYS = 120;
 const QUOTE_WINDOW_DAYS = 90;
 import type { Principal } from "../auth/principal";
 import { isDemoMode, vapidConfig } from "../env";
@@ -360,7 +358,7 @@ function productionAlerts(orders: Order[], machines: Machine[], timezone: string
       level: "warning",
       title: `${m.name} en mantenimiento`,
       body: stop?.reason ? `${stop.reason} · su capacidad no cuenta en la planeación.` : "Su capacidad no cuenta en la planeación.",
-      link: "/admin/cola",
+      link: "/admin/maquinas",
     });
   }
   return alerts;

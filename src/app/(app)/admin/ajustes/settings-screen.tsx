@@ -44,7 +44,7 @@ export function SettingsScreen() {
             {label}
           </a>
         ))}
-        <Link href="/admin/cola" className="rounded-lg border border-line px-3 py-1.5 text-ink-soft hover:border-glow/60 hover:text-ink">
+        <Link href="/admin/maquinas" className="rounded-lg border border-line px-3 py-1.5 text-ink-soft hover:border-glow/60 hover:text-ink">
           Máquinas →
         </Link>
       </nav>

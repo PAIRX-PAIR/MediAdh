@@ -1,17 +1,19 @@
 "use client";
 
 import { ClipboardPlus, Download, Search } from "lucide-react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useSync } from "@/components/providers/sync-provider";
 import { OrderDetailModal } from "@/components/production/order-detail";
 import { OrderFormModal } from "@/components/production/order-form";
 import { OrderCard } from "@/components/production/order-parts";
+import { TallerTabs } from "@/components/production/taller-tabs";
 import { PageHeader, Segmented } from "@/components/ui/kit";
 import { Button, EmptyState, Input } from "@/components/ui/primitives";
 import { api } from "@/lib/client/api";
 import { useProduction } from "@/lib/client/use-production";
-import { isLate } from "@/lib/domain/lifecycle";
+import { isLate, ORDER_WINDOW_DAYS } from "@/lib/domain/lifecycle";
 import type { OrderView } from "@/lib/domain/views";
 
 type View = "activas" | "entregar" | "entregadas" | "facturar" | "vencidas" | "garantia" | "todas";
@@ -85,6 +87,8 @@ export function OrdersScreen() {
         }
       />
 
+      <TallerTabs />
+
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center">
         <Segmented
           label="Vista"
@@ -105,6 +109,16 @@ export function OrdersScreen() {
           <Input type="search" aria-label="Buscar orden" placeholder="Folio, cliente o trabajo" className="pl-10" value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
       </div>
+
+      {(view === "entregadas" || view === "todas") && (
+        <p className="mb-4 text-sm text-muted">
+          Aquí van las órdenes abiertas y las entregadas en los últimos {ORDER_WINDOW_DAYS} días. Las anteriores están en{" "}
+          <Link href="/admin/historico" className="font-semibold text-glow hover:underline">
+            Histórico
+          </Link>
+          .
+        </p>
+      )}
 
       {list.length === 0 ? (
         <EmptyState
