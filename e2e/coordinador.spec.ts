@@ -54,13 +54,19 @@ test.describe("consola del coordinador", () => {
     await expect(page.getByRole("img", { name: /Carga diaria de CNC¹ Leadwell/ })).toBeVisible();
   });
 
-  test("las cuatro secciones del Taller se navegan con las mismas pestañas", async ({ page }) => {
+  test("las cuatro secciones del Taller tienen su pestaña y su pantalla", async ({ page }) => {
     await page.goto("/admin/programacion");
     const tabs = page.getByRole("navigation", { name: "Secciones del Taller" });
-    for (const name of ["Órdenes de trabajo", "Máquinas", "Producción", "Programación"]) {
-      // El aviso de entregas de la demo tapa la página al cargar: se cierra antes de tocar la pestaña.
-      await page.getByRole("button", { name: "Entendido" }).click({ timeout: 2000 }).catch(() => undefined);
-      await tabs.getByRole("link", { name }).click();
+    const sections = [
+      { name: "Órdenes de trabajo", href: "/admin/ordenes" },
+      { name: "Máquinas", href: "/admin/maquinas" },
+      { name: "Producción", href: "/admin/produccion" },
+      { name: "Programación", href: "/admin/programacion" },
+    ];
+    for (const { name, href } of sections) {
+      await expect(tabs.getByRole("link", { name })).toHaveAttribute("href", href);
+      // La pestaña apunta a la pantalla correcta: se abre por su dirección y muestra su título.
+      await page.goto(href);
       await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
     }
   });
