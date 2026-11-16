@@ -432,6 +432,18 @@ export type Claim = z.infer<typeof claimSchema>;
 export const ORDER_STATUSES = ["recibida", "en_proceso", "terminada", "entregada", "cerrada", "garantia", "cancelada"] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
+/** Mensaje del chat de una OT: el taller comenta la orden entre todos los que la atienden. */
+export const chatMessageSchema = z.object({
+  id,
+  at: isoDateTime,
+  authorId: z.string().nullable(),
+  authorName: z.string(),
+  text: z.string().min(1).max(1000),
+});
+export type ChatMessage = z.infer<typeof chatMessageSchema>;
+/** Un chat se corta a los últimos mensajes para que la orden no crezca sin límite. */
+export const CHAT_LIMIT = 300;
+
 export const orderSchema = z.object({
   id,
   folio: z.string(),
@@ -489,6 +501,7 @@ export const orderSchema = z.object({
     })
     .default({ pending: false, number: null, invoicedAt: null, none: false }),
   claims: z.array(claimSchema).default([]),
+  chat: z.array(chatMessageSchema).default([]),
   /** Satisfacción del cliente 1–5. */
   satisfaction: z.number().int().min(1).max(5).nullable().default(null),
   /** Flags that make the reminder scheduler idempotent. */

@@ -29,9 +29,10 @@ import { autoCloseAt, orderMoney, warrantyStatus, type WarrantyStatus } from "@/
 import { formatCop } from "@/lib/domain/quote";
 import type { ClaimKind, Order } from "@/lib/domain/schema";
 import { DueBadge, OrderStatusChip } from "./order-parts";
+import { OrderChat } from "./order-chat";
 import { RequiredSuppliesModal } from "./required-supplies";
 
-type Tab = "resumen" | "ruta" | "archivos" | "dinero" | "historial";
+type Tab = "resumen" | "ruta" | "archivos" | "chat" | "dinero" | "historial";
 
 export function OrderDetailModal({ orderId, onClose, onEdit, initialTab = "resumen" }: { orderId: string; onClose: () => void; onEdit: () => void; initialTab?: Tab }) {
   const { data } = useSync();
@@ -217,6 +218,7 @@ export function OrderDetailModal({ orderId, onClose, onEdit, initialTab = "resum
             { value: "resumen", label: "Resumen" },
             { value: "ruta", label: "Ruta", count: order.workItems.filter((w) => w.status !== "completada").length },
             { value: "archivos", label: "Archivos", count: order.drawingIds.length + order.intakePhotoIds.length + order.photoIds.length },
+            { value: "chat", label: "Chat", count: (order.chat ?? []).length },
             { value: "dinero", label: "Dinero" },
             { value: "historial", label: "Historial" },
           ]}
@@ -324,6 +326,8 @@ export function OrderDetailModal({ orderId, onClose, onEdit, initialTab = "resum
             <p className="text-xs text-muted">Fotos hasta 4 MB (se comprimen solas en el celular) y PDF hasta 4 MB. Solo las ve el equipo que trabaja en esta orden.</p>
           </div>
         )}
+
+        {tab === "chat" && <OrderChat orderId={order.id} messages={order.chat ?? []} />}
 
         {tab === "dinero" && (
           <div className="flex flex-col gap-4">

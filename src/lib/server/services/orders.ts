@@ -21,7 +21,7 @@ import type {
   TaskPriority,
   WorkItem,
 } from "@/lib/domain/schema";
-import { RETENTION } from "@/lib/domain/schema";
+import { CHAT_LIMIT, RETENTION } from "@/lib/domain/schema";
 import { addDays, daysBetween, isRealDate, zonedInstant } from "@/lib/domain/time";
 import { isOwner, type Principal } from "../auth/principal";
 import { badRequest, conflict, forbidden, notFound } from "../http";
@@ -341,6 +341,7 @@ export function createOrderIn(docs: OrderDocs, principal: Principal, input: Orde
     closedAt: null,
     invoice: { pending: false, number: null, invoicedAt: null, none: false },
     claims: [],
+    chat: [],
     satisfaction: null,
     reminders: { before24h: false, dayOf: false, overdue: false },
     historical: false,
@@ -640,6 +641,16 @@ export async function generalSupplyAction(principal: Principal, id: string, inpu
   });
 }
 
+/** Agrega un mensaje al chat de la OT. No cambia el estado ni avisa por push: es una conversación, no un movimiento. */
+export async function postOrderChat(principal: Principal, id: string, text: string) {
+  return getDb().transact(ORDER_DOCS, "Mensaje en el chat de una orden", (docs) => {
+    const order = findOrder(docs.orders, id);
+    const message = { id: newId(), at: nowIso(), authorId: principal.user.id, authorName: principal.user.displayName, text };
+    order.chat = [...(order.chat ?? []), message].slice(-CHAT_LIMIT);
+    return { order, message };
+  });
+}
+
 export async function orderAction(principal: Principal, id: string, input: OrderAction) {
   return getDb().transact([...ORDER_DOCS, "settings"], "Acción sobre una orden de trabajo", (docs) => {
     const order = findOrder(docs.orders, id);
@@ -863,6 +874,7 @@ export async function createHistoricalOrder(principal: Principal, input: Histori
       closedAt: delivered,
       invoice: { pending: false, number: input.invoiceNumber, invoicedAt: input.invoiceNumber ? delivered : null, none: false },
       claims: [],
+      chat: [],
       satisfaction: input.satisfaction,
       reminders: { before24h: true, dayOf: true, overdue: true },
       historical: true,
