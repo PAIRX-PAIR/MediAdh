@@ -13,6 +13,8 @@ test.describe("consola del coordinador", () => {
   test("el mando recomienda con qué orden seguir y explica por qué", async ({ page }) => {
     const errors = watchConsole(page);
     await expect(page.getByRole("heading", { level: 1, name: /Buen(os|as) (días|tardes|noches)/ })).toBeVisible();
+    // «Sigue con» vive en Producción (el Inicio ya no repite el panel).
+    await page.goto("/admin/produccion");
     await expect(page.getByText("Sigue con", { exact: true })).toBeVisible();
     await expect(page.getByText(/OT-\d{4}/).first()).toBeVisible();
     await page.getByRole("button", { name: /OT-\d{4}/ }).first().click();

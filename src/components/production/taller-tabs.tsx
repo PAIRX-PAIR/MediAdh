@@ -22,6 +22,7 @@ export function TallerTabs() {
             <li key={s.href} className="min-w-0">
               <Link
                 href={s.href}
+                aria-label={s.label}
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-center font-display text-[11px] font-semibold leading-tight transition sm:flex-row sm:gap-2 sm:text-sm",
