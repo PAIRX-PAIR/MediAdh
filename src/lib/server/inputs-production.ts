@@ -130,6 +130,8 @@ export const orderPatchInput = z
   .partial()
   .refine((v) => Object.keys(v).length > 0, "Nada que actualizar");
 
+export const orderChatInput = z.object({ text: requiredText(1000) });
+
 export const orderActionInput = z.discriminatedUnion("action", [
   z.object({ action: z.literal("status"), to: z.enum(ORDER_STATUSES) }),
   z.object({ action: z.literal("deliver"), satisfaction: satisfaction.default(null), finalPrice: z.union([money, z.null()]).default(null), noInvoice: z.boolean().optional() }),

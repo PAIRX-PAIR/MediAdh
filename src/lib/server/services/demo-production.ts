@@ -142,6 +142,7 @@ export function demoProduction(ctx: DemoContext) {
       closedAt: null,
       invoice: { pending: false, number: null, invoicedAt: null, none: false },
       claims: [],
+      chat: [],
       satisfaction: null,
       reminders: { before24h: false, dayOf: false, overdue: false },
       historical: false,
