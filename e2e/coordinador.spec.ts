@@ -58,6 +58,8 @@ test.describe("consola del coordinador", () => {
     await page.goto("/admin/programacion");
     const tabs = page.getByRole("navigation", { name: "Secciones del Taller" });
     for (const name of ["Órdenes de trabajo", "Máquinas", "Producción", "Programación"]) {
+      // El aviso de entregas de la demo tapa la página al cargar: se cierra antes de tocar la pestaña.
+      await page.getByRole("button", { name: "Entendido" }).click({ timeout: 2000 }).catch(() => undefined);
       await tabs.getByRole("link", { name }).click();
       await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
     }
