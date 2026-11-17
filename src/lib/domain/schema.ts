@@ -205,6 +205,8 @@ export const NOTIFICATION_TYPES = [
   "order_claim",
   "quote_approved",
   "machine_status",
+  "due_proposal",
+  "due_decision",
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -444,6 +446,35 @@ export type ChatMessage = z.infer<typeof chatMessageSchema>;
 /** Un chat se corta a los últimos mensajes para que la orden no crezca sin límite. */
 export const CHAT_LIMIT = 300;
 
+/**
+ * Autorización de fechas: Producción propone, Gerencia revisa y confirma. La fecha propuesta vive aparte
+ * de order.due (la comprometida), y una propuesta pendiente nunca se muestra como fecha confirmada.
+ */
+export const DUE_PROPOSAL_STATUSES = ["borrador", "pendiente_aprobacion", "ajuste_solicitado", "aprobada", "rechazada", "reprogramacion_pendiente"] as const;
+export type DueProposalStatus = (typeof DUE_PROPOSAL_STATUSES)[number];
+
+export const dueProposalSchema = z.object({
+  status: z.enum(DUE_PROPOSAL_STATUSES),
+  date: isoDate,
+  time: z.string().regex(/^\d{2}:\d{2}$/),
+  /** Causa (obligatoria al reprogramar una fecha ya comprometida). */
+  reason: z.string().max(500).default(""),
+  /** Operaciones afectadas por la reprogramación (ids de workItems). */
+  affectedWorkItemIds: z.array(z.string()).default([]),
+  /** Fecha comprometida antes de esta propuesta, para conservar el historial del cambio. */
+  previous: z.object({ date: isoDate, time: z.string() }).nullable().default(null),
+  /** Fin proyectado con la capacidad del momento en que se propuso; null = no cabe en el horizonte. */
+  projectedFinish: isoDate.nullable().default(null),
+  /** La propuesta se envió con conflicto de capacidad (la fecha no cabe). */
+  conflict: z.boolean().default(false),
+  requestedBy: z.string().nullable().default(null),
+  requestedAt: isoDateTime,
+  decidedBy: z.string().nullable().default(null),
+  decidedAt: isoDateTime.nullable().default(null),
+  decisionNote: z.string().max(500).default(""),
+});
+export type DueProposal = z.infer<typeof dueProposalSchema>;
+
 export const orderSchema = z.object({
   id,
   folio: z.string(),
@@ -502,6 +533,7 @@ export const orderSchema = z.object({
     .default({ pending: false, number: null, invoicedAt: null, none: false }),
   claims: z.array(claimSchema).default([]),
   chat: z.array(chatMessageSchema).default([]),
+  dueProposal: dueProposalSchema.nullable().default(null),
   /** Satisfacción del cliente 1–5. */
   satisfaction: z.number().int().min(1).max(5).nullable().default(null),
   /** Flags that make the reminder scheduler idempotent. */

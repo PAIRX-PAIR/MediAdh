@@ -152,6 +152,19 @@ export const attachmentAssemblyInput = z.object({
 
 export const orderChatInput = z.object({ text: requiredText(1000) });
 
+/** Propuesta de fecha: si la orden ya tiene una fecha comprometida, es una reprogramación y pide causa. */
+export const dueProposalInput = z.object({
+  date,
+  time: z.string().regex(/^\d{2}:\d{2}$/),
+  reason: text(500),
+  affectedWorkItemIds: z.array(z.string().max(64)).max(60).default([]),
+});
+
+export const dueDecisionInput = z.object({
+  decision: z.enum(["aprobar", "rechazar", "ajuste"]),
+  note: text(500),
+});
+
 export const orderActionInput = z.discriminatedUnion("action", [
   z.object({ action: z.literal("status"), to: z.enum(ORDER_STATUSES) }),
   z.object({ action: z.literal("deliver"), satisfaction: satisfaction.default(null), finalPrice: z.union([money, z.null()]).default(null), noInvoice: z.boolean().optional() }),

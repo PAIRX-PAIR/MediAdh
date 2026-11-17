@@ -30,6 +30,7 @@ import { formatCop } from "@/lib/domain/quote";
 import type { ClaimKind, Order } from "@/lib/domain/schema";
 import { DueBadge, OrderStatusChip } from "./order-parts";
 import { OrderChat } from "./order-chat";
+import { DueCard } from "./due-card";
 import { RequiredSuppliesModal } from "./required-supplies";
 
 type Tab = "resumen" | "ruta" | "archivos" | "chat" | "dinero" | "historial";
@@ -223,6 +224,8 @@ export function OrderDetailModal({ orderId, onClose, onEdit, initialTab = "resum
             { value: "historial", label: "Historial" },
           ]}
         />
+
+        {tab === "resumen" && <DueCard order={order} />}
 
         {tab === "resumen" && (
           <div className="flex flex-col gap-4">

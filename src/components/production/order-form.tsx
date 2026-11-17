@@ -152,13 +152,14 @@ export function OrderFormModal({ order, onClose, onSaved }: { order?: OrderView 
               <Input
                 type="date"
                 aria-label="Fecha de entrega"
+                disabled={Boolean(order) && data.me.scope !== "total"}
                 value={form.due?.date ?? ""}
                 min={order ? undefined : data.today}
                 onChange={(e) => set("due", e.target.value ? { date: e.target.value, time: form.due?.time ?? "17:00" } : null)}
               />
-              <Input type="time" aria-label="Hora de entrega" value={form.due?.time ?? "17:00"} disabled={!form.due} onChange={(e) => form.due && set("due", { ...form.due, time: e.target.value })} />
+              <Input type="time" aria-label="Hora de entrega" value={form.due?.time ?? "17:00"} disabled={!form.due || (Boolean(order) && data.me.scope !== "total")} onChange={(e) => form.due && set("due", { ...form.due, time: e.target.value })} />
             </div>
-            <p className="mt-2 text-xs text-muted">Se avisa 24 h antes, el mismo día y si se vence.</p>
+            <p className="mt-2 text-xs text-muted">Se avisa 24 h antes, el mismo día y si se vence.{order && data.me.scope !== "total" ? " La fecha la confirma gerencia desde la orden (ver «Fecha de entrega»)." : ""}</p>
             {answer && (
               <div className="mt-3">
                 <p className="hud-label mb-1.5">Programación</p>

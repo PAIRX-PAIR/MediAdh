@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { evaluateAccess } from "@/lib/domain/contracts";
-import { timeInZone, todayIn } from "@/lib/domain/time";
+import { addDays, timeInZone, todayIn } from "@/lib/domain/time";
 import type { Principal } from "../auth/principal";
 import { Db, setDbForTests } from "../store";
 import { MemoryAttachmentStore, setAttachmentStoreForTests } from "../store/attachments";
@@ -734,5 +734,67 @@ describe("insumos anotados al editar la orden", () => {
     });
     rows = supplyRows((await db.read(["orders"])).orders.items);
     expect(rows.map((r) => r.supply.name)).toEqual(["Rodamiento 608"]);
+  });
+});
+
+describe("autorización de fechas: propone producción, decide gerencia", () => {
+  async function withCoordinator() {
+    const { admin, t1, f1 } = await setup();
+    const { users } = await db.read(["users"]);
+    const jefe = users.items.find((u) => u.username === "jefe")!;
+    await db.transact(["users"], "coordinación de prueba", ({ users: col }) => {
+      col.items.push({ ...jefe, id: "coord-1", username: "coord", displayName: "Coordinación", adminScope: "gestion" });
+    });
+    const coord = await principalFor("coord");
+    return { admin, coord, t1, f1 };
+  }
+
+  it("quien no es gerencia no compromete la fecha: la deja como propuesta", async () => {
+    const { admin, coord } = await withCoordinator();
+    const due = { date: addDays(admin.today, 10), time: "17:00" };
+    const { order } = await orders.createOrder(coord, baseOrder({ due }));
+    expect(order.due).toBeNull();
+    expect(order.dueProposal).toMatchObject({ status: "pendiente_aprobacion", date: due.date, time: "17:00", previous: null });
+  });
+
+  it("una propuesta pendiente no cambia la fecha; solo gerencia la aprueba y la compromete", async () => {
+    const { admin, coord } = await withCoordinator();
+    const { order } = await orders.createOrder(admin, baseOrder({ due: null }));
+    const date = addDays(admin.today, 12);
+    await orders.proposeDue(coord, order.id, { date, time: "16:00", reason: "", affectedWorkItemIds: [] });
+    expect((await db.read(["orders"])).orders.items.find((o) => o.id === order.id)!.due).toBeNull();
+
+    await expect(orders.decideDue(coord, order.id, { decision: "aprobar", note: "" })).rejects.toThrow("Solo gerencia");
+    const { order: approved } = await orders.decideDue(admin, order.id, { decision: "aprobar", note: "ok" });
+    expect(approved.due).toEqual({ date, time: "16:00" });
+    expect(approved.dueProposal).toMatchObject({ status: "aprobada", decidedBy: admin.user.id });
+  });
+
+  it("quien no es gerencia no puede cambiar la fecha comprometida directamente", async () => {
+    const { admin, coord } = await withCoordinator();
+    const { order } = await orders.createOrder(admin, baseOrder({ due: { date: addDays(admin.today, 9), time: "17:00" } }));
+    await expect(orders.updateOrder(coord, order.id, { due: { date: addDays(admin.today, 2), time: "17:00" } })).rejects.toThrow("confirma gerencia");
+  });
+
+  it("reprogramar una fecha ya comprometida exige causa y conserva la fecha anterior", async () => {
+    const { admin, coord } = await withCoordinator();
+    const first = { date: addDays(admin.today, 9), time: "17:00" };
+    const { order } = await orders.createOrder(admin, baseOrder({ due: first }));
+    await expect(orders.proposeDue(coord, order.id, { date: addDays(admin.today, 14), time: "17:00", reason: " ", affectedWorkItemIds: [] })).rejects.toThrow("causa");
+    const { order: pending } = await orders.proposeDue(coord, order.id, { date: addDays(admin.today, 14), time: "17:00", reason: "Falta un insumo", affectedWorkItemIds: [] });
+    expect(pending.dueProposal).toMatchObject({ status: "reprogramacion_pendiente", previous: first, reason: "Falta un insumo" });
+    expect(pending.due).toEqual(first);
+    const { order: rejected } = await orders.decideDue(admin, order.id, { decision: "rechazar", note: "No" });
+    expect(rejected.due).toEqual(first);
+    expect(rejected.dueProposal?.status).toBe("rechazada");
+  });
+
+  it("aprobar vuelve a comprobar la capacidad: si la fecha ya no cabe, no se compromete", async () => {
+    const { admin, coord } = await withCoordinator();
+    const { order } = await orders.createOrder(admin, baseOrder({ due: null }));
+    // Una fecha anterior a hoy nunca cabe: así se comprueba que la aprobación revisa de nuevo.
+    await orders.proposeDue(coord, order.id, { date: addDays(admin.today, -1), time: "17:00", reason: "", affectedWorkItemIds: [] });
+    await expect(orders.decideDue(admin, order.id, { decision: "aprobar", note: "" })).rejects.toThrow("La capacidad cambió");
+    expect((await db.read(["orders"])).orders.items.find((o) => o.id === order.id)!.due).toBeNull();
   });
 });
