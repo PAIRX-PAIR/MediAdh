@@ -24,6 +24,7 @@ import type {
   TaskPriority,
   TaskStatus,
 } from "@/lib/domain/schema";
+import { PART_BYTES, SINGLE_UPLOAD_MAX_BYTES } from "@/lib/domain/files";
 import type { AttachmentView, ClientView, OrderView, PublicInfo, QuoteView, SyncPayload } from "@/lib/domain/views";
 import type { Indicators } from "@/lib/server/services/indicators";
 import type { HourKind, PayrollLine, Quincena } from "@/lib/domain/payroll";
@@ -270,6 +271,8 @@ export type QuoteActionInput =
 
 /** Uploads one file as the raw request body (images should be compressed first). */
 export async function uploadFile(file: Blob, meta: { kind: AttachmentKind; orderId?: string | null; quoteId?: string | null; name: string }) {
+  // Un PDF que no cabe en una petición (planos de hasta 50 MB) se parte aquí y el servidor lo arma.
+  if (file.type === "application/pdf" && file.size > SINGLE_UPLOAD_MAX_BYTES) return uploadPdfInParts(file, meta);
   const params = new URLSearchParams({ tipo: meta.kind, nombre: meta.name });
   if (meta.orderId) params.set("orden", meta.orderId);
   if (meta.quoteId) params.set("cotizacion", meta.quoteId);
@@ -286,6 +289,41 @@ export async function uploadFile(file: Blob, meta: { kind: AttachmentKind; order
   }
   const body = (await res.json().catch(() => ({}))) as { attachment?: AttachmentView; error?: string; code?: string };
   if (!res.ok || !body.attachment) throw new ApiError(res.status, body.error ?? "No se pudo subir el archivo.", body.code ?? "error");
+  return body.attachment;
+}
+
+/** Envía una parte de un PDF grande; un fallo de red se reintenta una vez, un «no» del servidor no se repite. */
+async function sendPart(chunk: Blob): Promise<{ id: string; size: number; ref: string | null; sig: string }> {
+  const attempt = async () => {
+    let res: Response;
+    try {
+      res = await fetch("/api/adjuntos/parte", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/octet-stream" }, body: chunk });
+    } catch {
+      throw new ApiError(0, "Sin conexión. Revisa tu internet e intenta de nuevo.", "network");
+    }
+    const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string } & Partial<{ id: string; size: number; ref: string | null; sig: string }>;
+    if (!res.ok || !body.id) throw new ApiError(res.status, body.error ?? "No se pudo subir una parte del archivo.", body.code ?? "error");
+    return { id: body.id, size: body.size!, ref: body.ref ?? null, sig: body.sig! };
+  };
+  return attempt().catch((e: unknown) => (e instanceof ApiError && e.status !== 0 && e.status < 500 ? Promise.reject(e) : attempt()));
+}
+
+async function uploadPdfInParts(file: Blob, meta: { kind: AttachmentKind; orderId?: string | null; quoteId?: string | null; name: string }) {
+  const parts = [];
+  for (let start = 0; start < file.size; start += PART_BYTES) parts.push(await sendPart(file.slice(start, start + PART_BYTES)));
+  let res: Response;
+  try {
+    res = await fetch("/api/adjuntos/armar", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ kind: meta.kind, orderId: meta.orderId ?? null, quoteId: meta.quoteId ?? null, name: meta.name, parts }),
+    });
+  } catch {
+    throw new ApiError(0, "Sin conexión. Revisa tu internet e intenta de nuevo.", "network");
+  }
+  const body = (await res.json().catch(() => ({}))) as { attachment?: AttachmentView; error?: string; code?: string };
+  if (!res.ok || !body.attachment) throw new ApiError(res.status, body.error ?? "No se pudo armar el archivo.", body.code ?? "error");
   return body.attachment;
 }
 
