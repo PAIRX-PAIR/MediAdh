@@ -12,7 +12,8 @@ import { actorOf, audit, newId, nowIso, track } from "./common";
 /** Vercel functions accept request bodies up to 4.5 MB; images are compressed in the browser first. */
 export const MAX_ATTACHMENT_BYTES = SINGLE_UPLOAD_MAX_BYTES;
 export { PART_BYTES, MAX_PARTS };
-const MAX_PER_ORDER = 60;
+/** Fotos y planos por OT (antes 60): cada avance y cada foto de llegada cuentan. */
+const MAX_PER_ORDER = 150;
 
 const EXTENSION: Record<AttachmentMime, string> = {
   "image/jpeg": "jpg",
