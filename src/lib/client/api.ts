@@ -443,6 +443,10 @@ export const api = {
     update: (id: string, patch: Partial<OrderInput>) => request<{ order: Order }>(`/api/admin/orders/${encodeURIComponent(id)}`, { method: "PATCH", body: patch }),
     action: (id: string, input: OrderActionInput) =>
       request<{ order: Order }>(`/api/admin/orders/${encodeURIComponent(id)}/action`, { method: "POST", body: input }),
+    proposeDue: (id: string, input: { date: string; time: string; reason: string; affectedWorkItemIds: string[] }) =>
+      request<{ order: Order }>(`/api/admin/orders/${encodeURIComponent(id)}/propuesta`, { method: "POST", body: input }),
+    decideDue: (id: string, input: { decision: "aprobar" | "rechazar" | "ajuste"; note: string }) =>
+      request<{ order: Order }>(`/api/admin/orders/${encodeURIComponent(id)}/decision`, { method: "POST", body: input }),
     chat: (id: string, text: string) => request<{ order: Order }>(`/api/admin/orders/${encodeURIComponent(id)}/chat`, { method: "POST", body: { text } }),
     remove: (id: string) => request<{ ok: true }>(`/api/admin/orders/${encodeURIComponent(id)}`, { method: "DELETE" }),
     historical: (input: HistoricalInput) => request<{ order: Order }>("/api/admin/historico", { method: "POST", body: input }),

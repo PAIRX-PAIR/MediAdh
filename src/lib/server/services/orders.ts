@@ -2,7 +2,7 @@ import "server-only";
 import { diffFields } from "@/lib/domain/diff";
 import { CLAIM_KIND_LABEL, PROCESS_LABEL } from "@/lib/domain/labels";
 import { ORDER_STATUS_LABEL, canTransition, statusFromWork, warrantyStatus } from "@/lib/domain/lifecycle";
-import { OPEN_ORDER_STATUSES, remainingHours } from "@/lib/domain/planning";
+import { OPEN_ORDER_STATUSES, planOrders, projectedEnds, remainingHours, type PlanContext } from "@/lib/domain/planning";
 import type {
   Claim,
   ClaimKind,
@@ -22,7 +22,8 @@ import type {
   WorkItem,
 } from "@/lib/domain/schema";
 import { CHAT_LIMIT, RETENTION } from "@/lib/domain/schema";
-import { addDays, daysBetween, isRealDate, zonedInstant } from "@/lib/domain/time";
+import { addDays, daysBetween, isRealDate, todayIn, zonedInstant } from "@/lib/domain/time";
+import type { DueProposalStatus } from "@/lib/domain/schema";
 import { isOwner, type Principal } from "../auth/principal";
 import { badRequest, conflict, forbidden, notFound } from "../http";
 import { getDb } from "../store";
@@ -328,7 +329,7 @@ export function createOrderIn(docs: OrderDocs, principal: Principal, input: Orde
     intakePhotoIds: [],
     drawingIds: extra.drawingIds ?? [],
     photoIds: [],
-    due: input.due,
+    due: isOwner(principal) ? input.due : null,
     workItems: buildWorkItems(input.workItems, [], docs.machines.items, docs.positions.items),
     supplies: buildSupplies(input.supplies, []),
     requiredSupplies: [],
@@ -342,6 +343,7 @@ export function createOrderIn(docs: OrderDocs, principal: Principal, input: Orde
     invoice: { pending: false, number: null, invoicedAt: null, none: false },
     claims: [],
     chat: [],
+    dueProposal: null,
     satisfaction: null,
     reminders: { before24h: false, dayOf: false, overdue: false },
     historical: false,
@@ -354,6 +356,11 @@ export function createOrderIn(docs: OrderDocs, principal: Principal, input: Orde
   };
   track(order, actor, extra.quoteId ? "Creada desde una cotización aprobada" : "Registró el ingreso de las piezas");
   docs.orders.items.push(order);
+  // Quien no es gerencia deja la fecha como propuesta: no queda comprometida hasta que gerencia la apruebe.
+  if (!isOwner(principal) && input.due) {
+    order.dueProposal = proposal({ date: input.due.date, time: input.due.time, reason: "", affectedWorkItemIds: [] }, null, null, principal, now);
+    track(order, actor, "Propuso una fecha de entrega");
+  }
   const notifications = syncTasks(docs, order, actor, principal.today);
   audit(docs.audit, actor, "ot_creada", order.folio, `${order.title} · ${order.clientName}`);
   return { order, notifications };
@@ -379,6 +386,9 @@ export async function updateOrder(principal: Principal, id: string, patch: Parti
     if (patch.quantity !== undefined) order.intake.quantity = patch.quantity;
     if (patch.condition !== undefined) order.intake.condition = patch.condition;
     if (patch.receivedAt) order.intake.receivedAt = patch.receivedAt;
+    if (patch.due !== undefined && JSON.stringify(patch.due) !== JSON.stringify(order.due) && !isOwner(principal)) {
+      throw forbidden("La fecha la confirma gerencia. Propónla desde la orden y gerencia la aprueba.");
+    }
     if (patch.due !== undefined) {
       const moved = JSON.stringify(patch.due) !== JSON.stringify(order.due);
       order.due = patch.due;
@@ -436,6 +446,150 @@ export async function updateOrder(principal: Principal, id: string, patch: Parti
 }
 
 /* ─────────────────────────────── Acciones ─────────────────────────────── */
+
+/* ─────────────────────── Autorización de fechas ─────────────────────── */
+
+/** Una propuesta sin decidir: mientras esté así, la fecha de la orden no cambia. */
+const OPEN_PROPOSAL: DueProposalStatus[] = ["pendiente_aprobacion", "reprogramacion_pendiente"];
+
+export interface DueProposalInput {
+  date: string;
+  time: string;
+  reason: string;
+  affectedWorkItemIds: string[];
+}
+
+function proposal(
+  input: DueProposalInput,
+  previous: { date: string; time: string } | null,
+  projectedFinish: string | null,
+  principal: Principal,
+  now: string,
+): NonNullable<Order["dueProposal"]> {
+  return {
+    status: previous ? "reprogramacion_pendiente" : "pendiente_aprobacion",
+    date: input.date,
+    time: input.time,
+    reason: input.reason,
+    affectedWorkItemIds: input.affectedWorkItemIds,
+    previous,
+    projectedFinish,
+    conflict: projectedFinish === null || projectedFinish > input.date,
+    requestedBy: principal.user.id,
+    requestedAt: now,
+    decidedBy: null,
+    decidedAt: null,
+    decisionNote: "",
+  };
+}
+
+/**
+ * Fin de la orden si se comprometiera en `due`, con la capacidad real de hoy (turnos, paros y lo ya
+ * comprometido). Solo calcula: una simulación no reserva capacidad.
+ */
+function projectedFinish(docs: Pick<Database, "orders" | "machines" | "settings">, orderId: string, due: { date: string; time: string }): string | null {
+  const timezone = docs.settings.timezone;
+  const ctx: PlanContext = {
+    machines: docs.machines.items,
+    calendar: { schedule: docs.settings.production.schedule, skipHolidays: docs.settings.production.skipHolidays },
+    timezone,
+    now: Date.now(),
+    today: todayIn(timezone),
+  };
+  const orders = docs.orders.items.map((o) => (o.id === orderId ? { ...o, due } : o));
+  return projectedEnds(planOrders(orders, ctx, 60)).get(orderId) ?? null;
+}
+
+/** Producción propone una fecha. Si la orden ya tiene fecha comprometida, es una reprogramación y pide causa. */
+export async function proposeDue(principal: Principal, id: string, input: DueProposalInput) {
+  return getDb().transact([...ORDER_DOCS, "settings"], "Propone una fecha de entrega", (docs) => {
+    const order = findOrder(docs.orders, id);
+    if (["cancelada", "cerrada", "entregada"].includes(order.status)) throw conflict("La orden ya no tiene entrega pendiente.");
+    if (order.dueProposal && OPEN_PROPOSAL.includes(order.dueProposal.status)) throw conflict("Ya hay una propuesta esperando la decisión de gerencia.");
+    const previous = order.due ? { date: order.due.date, time: order.due.time } : null;
+    if (previous && !input.reason.trim()) throw badRequest("Para cambiar una fecha ya comprometida escribe la causa.");
+    const finish = projectedFinish(docs, order.id, { date: input.date, time: input.time });
+    const now = nowIso();
+    const actor = actorOf(principal);
+    const next = proposal(input, previous, finish, principal, now);
+    order.dueProposal = next;
+    order.updatedAt = now;
+    order.updatedBy = principal.user.id;
+    track(order, actor, previous ? "Pidió reprogramar la entrega" : "Propuso una fecha de entrega");
+    audit(docs.audit, actor, "fecha_propuesta", order.folio, `${input.date} ${input.time}${next.conflict ? " · con conflicto" : ""}`);
+    const notifications = [
+      pushNotification(docs.notifications, actor, {
+        audience: { kind: "admins" },
+        type: "due_proposal",
+        title: `${previous ? "Reprogramación" : "Propuesta de fecha"} · ${order.folio}`,
+        body: `${input.date} · ${order.clientName}${next.conflict ? " · sin capacidad para esa fecha" : ""}`,
+        link: `/admin/ordenes?o=${order.id}`,
+        urgent: next.conflict,
+      }),
+    ];
+    return { order, notifications };
+  });
+}
+
+export interface DueDecisionInput {
+  decision: "aprobar" | "rechazar" | "ajuste";
+  note: string;
+}
+
+/**
+ * Gerencia aprueba, rechaza o pide ajustes. Al aprobar vuelve a comprobar la capacidad dentro de la misma
+ * transacción: si otra propuesta ya tomó esas horas, esta ya no cabe y hay que pedir un nuevo cálculo.
+ */
+export async function decideDue(principal: Principal, id: string, input: DueDecisionInput) {
+  if (!isOwner(principal)) throw forbidden("Solo gerencia aprueba, rechaza o pide ajustes a una fecha.");
+  return getDb().transact([...ORDER_DOCS, "settings"], "Decide sobre una fecha de entrega", (docs) => {
+    const order = findOrder(docs.orders, id);
+    const p = order.dueProposal;
+    if (!p || !OPEN_PROPOSAL.includes(p.status)) throw conflict("No hay una propuesta esperando decisión.");
+    if (input.decision === "ajuste" && !input.note.trim()) throw badRequest("Escribe qué hay que ajustar.");
+    const now = nowIso();
+    const actor = actorOf(principal);
+    let verb: string;
+    if (input.decision === "aprobar") {
+      const finish = projectedFinish(docs, order.id, { date: p.date, time: p.time });
+      if (finish === null || finish > p.date) {
+        throw conflict("La capacidad cambió y la fecha ya no cabe. Pide un nuevo cálculo antes de aprobar.", "capacity_changed");
+      }
+      order.due = { date: p.date, time: p.time };
+      // Una fecha nueva vuelve a armar los recordatorios, igual que al editarla.
+      order.reminders = { before24h: false, dayOf: false, overdue: false };
+      p.status = "aprobada";
+      p.projectedFinish = finish;
+      p.conflict = false;
+      verb = "aprobó";
+    } else if (input.decision === "rechazar") {
+      p.status = "rechazada";
+      verb = "rechazó";
+    } else {
+      p.status = "ajuste_solicitado";
+      verb = "pidió ajustes a";
+    }
+    p.decidedBy = principal.user.id;
+    p.decidedAt = now;
+    p.decisionNote = input.note;
+    order.updatedAt = now;
+    order.updatedBy = principal.user.id;
+    track(order, actor, `Gerencia ${verb} la fecha propuesta`);
+    audit(docs.audit, actor, "fecha_decidida", order.folio, `${input.decision}${input.note ? `: ${input.note}` : ""}`);
+    const notifications = p.requestedBy
+      ? [
+          pushNotification(docs.notifications, actor, {
+            audience: { kind: "user", userId: p.requestedBy },
+            type: "due_decision",
+            title: `Gerencia ${verb} la fecha de ${order.folio}`,
+            body: input.note || `${p.date} · ${order.clientName}`,
+            link: `/admin/ordenes?o=${order.id}`,
+          }),
+        ]
+      : [];
+    return { order, notifications };
+  });
+}
 
 export type OrderAction =
   | { action: "status"; to: OrderStatus }
@@ -875,6 +1029,7 @@ export async function createHistoricalOrder(principal: Principal, input: Histori
       invoice: { pending: false, number: input.invoiceNumber, invoicedAt: input.invoiceNumber ? delivered : null, none: false },
       claims: [],
       chat: [],
+      dueProposal: null,
       satisfaction: input.satisfaction,
       reminders: { before24h: true, dayOf: true, overdue: true },
       historical: true,
