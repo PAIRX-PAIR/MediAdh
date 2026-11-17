@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
-import { CLAIM_KINDS, CLIENT_KINDS, MACHINE_STATES, ORDER_STATUSES, PROCESSES } from "@/lib/domain/schema";
+import { MAX_PARTS, PART_BYTES } from "@/lib/domain/files";
+import { ATTACHMENT_KINDS, CLAIM_KINDS, CLIENT_KINDS, MACHINE_STATES, ORDER_STATUSES, PROCESSES } from "@/lib/domain/schema";
 import { requiredText, text } from "./http";
 import { date, entityId, nullableDate, optionalText } from "./inputs";
 
@@ -129,6 +130,25 @@ export const orderPatchInput = z
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, "Nada que actualizar");
+
+/** Armado de un PDF grande: las partes llegan con su firma (ver services/attachments.ts). */
+export const attachmentAssemblyInput = z.object({
+  kind: z.enum(ATTACHMENT_KINDS),
+  orderId: nullableId.default(null),
+  quoteId: nullableId.default(null),
+  name: requiredText(120),
+  parts: z
+    .array(
+      z.object({
+        id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+        size: z.number().int().min(1).max(PART_BYTES),
+        ref: z.string().max(200).nullable(),
+        sig: z.string().min(16).max(200),
+      }),
+    )
+    .min(2)
+    .max(MAX_PARTS),
+});
 
 export const orderChatInput = z.object({ text: requiredText(1000) });
 

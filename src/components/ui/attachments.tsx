@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { useSync } from "@/components/providers/sync-provider";
 import { ApiError, api, attachmentUrl, uploadFile } from "@/lib/client/api";
 import { ATTACHMENT_KIND_LABEL } from "@/lib/domain/labels";
+import { PDF_MAX_BYTES } from "@/lib/domain/files";
 import type { AttachmentKind } from "@/lib/domain/schema";
 import type { AttachmentView } from "@/lib/domain/views";
 import { Modal, useConfirm, useToast } from "./overlay";
@@ -39,7 +40,7 @@ async function compressImage(file: File): Promise<Blob> {
 
 async function prepare(file: File): Promise<Blob> {
   if (file.type === "application/pdf") {
-    if (file.size > MAX_BYTES) throw new Error(`“${file.name}” supera 4 MB. Divide el PDF o redúcelo.`);
+    if (file.size > PDF_MAX_BYTES) throw new Error(`“${file.name}” supera 50 MB. Divide el PDF o redúcelo.`);
     return file;
   }
   if (!file.type.startsWith("image/")) throw new Error(`“${file.name}” no es una foto ni un PDF.`);

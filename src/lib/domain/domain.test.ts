@@ -10,6 +10,7 @@ import { formatNit, parseNit, verificationDigit } from "./nit";
 import { dayHours, liquidate, paidDaysIn, quincenaOf, shiftQuincena } from "./payroll";
 import { canCommit, machineHoursOn, nextUp, occupancy, planOrders, prioritize, type PlanContext } from "./planning";
 import { quoteDisplayStatus, quoteTotals } from "./quote";
+import { PART_BYTES, PDF_MAX_BYTES, partCount } from "./files";
 import type { Machine, Order, WorkItem } from "./schema";
 import { zonedInstant } from "./time";
 
@@ -530,5 +531,13 @@ describe("reloj de jornada", () => {
     expect(format12h("12:00")).toBe("12:00 p. m.");
     expect(formatDuration(155)).toBe("2 h 35 min");
     expect(formatDuration(45)).toBe("45 min");
+  });
+});
+
+describe("archivos grandes por partes", () => {
+  it("un plano de 50 MB se parte en 15 pedazos de menos de 4 MB, y una foto cabe en una sola petición", () => {
+    expect(partCount(PDF_MAX_BYTES)).toBe(15);
+    expect(partCount(4 * 1024 * 1024)).toBe(2);
+    expect(PART_BYTES).toBeLessThan(4.5 * 1024 * 1024);
   });
 });

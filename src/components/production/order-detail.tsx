@@ -323,7 +323,7 @@ export function OrderDetailModal({ orderId, onClose, onEdit, initialTab = "resum
                 <AttachmentGallery items={prod.attachmentsOf([...ids])} canRemove empty="Nada adjunto todavía." />
               </section>
             ))}
-            <p className="text-xs text-muted">Fotos hasta 4 MB (se comprimen solas en el celular) y PDF hasta 4 MB. Solo las ve el equipo que trabaja en esta orden.</p>
+            <p className="text-xs text-muted">Fotos hasta 4 MB (se comprimen solas en el celular) y PDF hasta 50 MB (se suben por partes). Solo las ve el equipo que trabaja en esta orden.</p>
           </div>
         )}
 
