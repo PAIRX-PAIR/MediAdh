@@ -2,7 +2,10 @@
 
 import { ArrowRight, Check } from "lucide-react";
 import Link from "next/link";
+import { useSync } from "@/components/providers/sync-provider";
 import { useProduction } from "@/lib/client/use-production";
+import { PRIORITY_RANK } from "@/lib/domain/labels";
+import type { SyncPayload } from "@/lib/domain/views";
 import { guideOrder, nextStep, orderSteps } from "@/lib/domain/process";
 import { cn } from "@/components/ui/primitives";
 
@@ -12,6 +15,62 @@ import { cn } from "@/components/ui/primitives";
  * lo resume en cinco pasos para quien no quiere pensar en qué botón sigue.
  */
 export function ProcessGuide() {
+  const { data } = useSync();
+  // Si la persona tiene un puesto con tareas abiertas, su siguiente paso es SU tarea (no el de la orden).
+  const personal = nextTaskFor(data);
+  if (personal) return <PersonalStep task={personal.task} remaining={personal.remaining} />;
+  return <OrderGuide />;
+}
+
+/** La tarea que sigue en el puesto de la persona: misma prioridad que el panel de operarios. */
+function nextTaskFor(data: SyncPayload) {
+  if (!data.me.positionId) return null;
+  const open = data.tasks
+    .filter((t) => t.positionId === data.me.positionId && t.status !== "completada")
+    .sort((a, b) => {
+      const blocked = Number(a.status === "bloqueada") - Number(b.status === "bloqueada");
+      if (blocked) return blocked;
+      const pr = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
+      if (pr) return pr;
+      return (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999");
+    });
+  const task = open.find((t) => t.status !== "bloqueada") ?? open[0];
+  return task ? { task, remaining: open.length } : null;
+}
+
+type PersonalTask = NonNullable<ReturnType<typeof nextTaskFor>>["task"];
+
+function PersonalStep({ task, remaining }: { task: PersonalTask; remaining: number }) {
+  const blocked = task.status === "bloqueada";
+  return (
+    <section className="hud-panel hud-corners flex flex-col gap-4 p-5" aria-labelledby="siguiente-paso-title">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <h2 id="siguiente-paso-title" className="font-display text-xl font-bold text-ink">
+          Tu siguiente paso
+        </h2>
+        <span className="tabular text-sm text-muted">{remaining === 1 ? "1 tarea abierta" : `${remaining} tareas abiertas`}</span>
+      </div>
+      <p className="-mt-2 min-w-0 truncate text-sm text-muted">
+        <span className="tabular font-mono font-semibold text-glow">{task.folio}</span> · {task.title}
+      </p>
+      <div className="flex flex-col gap-3 rounded-xl border border-line bg-night/50 px-4 py-3.5 sm:flex-row sm:items-center">
+        <p className="min-w-0 flex-1 text-sm text-ink-soft">
+          <strong className="text-ink">{blocked ? "Bloqueada." : task.status === "en_proceso" ? "En curso." : "Pendiente."}</strong>{" "}
+          {blocked ? task.blockedReason || "Resuelve el bloqueo para seguir." : task.description || "Abre la tarea para ver el detalle."}
+          {task.quantity ? ` · ${task.quantityDone} de ${task.quantity} piezas` : ""}
+        </p>
+        <Link
+          href="/tareas"
+          className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-glow/40 bg-gradient-to-b from-navy-400 to-navy-600 px-5 font-display text-sm font-semibold text-white shadow-glow transition-[filter,transform] duration-150 hover:brightness-110 active:scale-[0.97]"
+        >
+          Abrir mi tarea <ArrowRight className="size-4" aria-hidden />
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+function OrderGuide() {
   const prod = useProduction();
   const order = guideOrder(prod.orders, prod.next?.orderId ?? null);
   if (!order) return null;
