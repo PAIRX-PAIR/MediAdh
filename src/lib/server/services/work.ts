@@ -287,6 +287,7 @@ export async function deleteTask(principal: Principal, taskId: string) {
     const task = tasks.items.find((t) => t.id === taskId);
     if (!task) throw notFound("Tarea no encontrada.");
     if (task.orderId) throw conflict("Esta tarea es un paso de una orden de trabajo. Quítalo desde la OT.", "order_owned");
+    if (!canWorkOn(principal, task)) throw forbidden("Solo puedes borrar tareas de tu puesto.");
     tasks.items = tasks.items.filter((t) => t.id !== taskId);
     audit(log, actorOf(principal), "tarea_eliminada", task.folio, task.title);
   });

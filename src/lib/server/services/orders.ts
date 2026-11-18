@@ -307,6 +307,7 @@ export function applyTaskToOrder(docs: Pick<OrderDocs, "orders" | "notifications
 /* ─────────────────────────────── Crear / editar ─────────────────────────────── */
 
 export async function createOrder(principal: Principal, input: OrderInput, extra: { quoteId?: string | null } = {}) {
+  if (input.price != null && !isOwner(principal)) throw forbidden("Los precios y las tarifas los fija gerencia. Crea la orden sin precio y gerencia lo pone.");
   assertDue(input.due);
   return getDb().transact(ORDER_DOCS, "Registra una orden de trabajo", (docs) => createOrderIn(docs, principal, input, extra));
 }
@@ -400,6 +401,7 @@ export async function updateOrder(principal: Principal, id: string, patch: Parti
         order.reminders = future ? { before24h: false, dayOf: false, overdue: false } : { ...order.reminders, before24h: true, dayOf: true };
       }
     }
+    if (patch.price !== undefined && patch.price !== order.price && !isOwner(principal)) throw forbidden("Los precios y las tarifas los fija gerencia.");
     if (patch.price !== undefined) order.price = patch.price;
     if (patch.notes !== undefined) order.notes = patch.notes;
     if (patch.supplies !== undefined) order.supplies = buildSupplies(patch.supplies, order.supplies);
@@ -857,6 +859,7 @@ export async function orderAction(principal: Principal, id: string, input: Order
         order.finishedAt ??= now;
         order.deliveredAt = now;
         if (input.satisfaction !== null) order.satisfaction = input.satisfaction;
+        if (input.finalPrice !== null && input.finalPrice !== order.price && !isOwner(principal)) throw forbidden("Los precios y las tarifas los fija gerencia. Entrega sin cambiar el precio o pide a gerencia el precio final.");
         if (input.finalPrice !== null) order.finalPrice = input.finalPrice;
         if (input.noInvoice !== undefined && !order.invoice.invoicedAt && order.invoice.none !== input.noInvoice) setNoInvoice(order, actor, input.noInvoice);
         statusChange("entregada", `Entregó al cliente · cierre automático en ${docs.settings.production.claimWindowDays} día(s) sin reclamos`);
@@ -978,6 +981,7 @@ export interface HistoricalInput {
 
 /** Jobs done before the app existed, so the history and inflation-adjusted prices start complete. */
 export async function createHistoricalOrder(principal: Principal, input: HistoricalInput) {
+  if (input.price !== null && !isOwner(principal)) throw forbidden("Los precios y las tarifas los fija gerencia. Registra el trabajo sin precio y gerencia lo completa.");
   if (!isRealDate(input.receivedAt) || !isRealDate(input.deliveredAt)) throw badRequest("Fechas inválidas.");
   if (input.deliveredAt < input.receivedAt) throw badRequest("La entrega no puede ser anterior al ingreso.");
   if (input.dueDate && !isRealDate(input.dueDate)) throw badRequest("Fecha prometida inválida.");

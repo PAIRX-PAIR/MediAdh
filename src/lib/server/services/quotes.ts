@@ -4,8 +4,8 @@ import { QUOTE_STATUS_LABEL } from "@/lib/domain/labels";
 import { formatCop, MAX_MARGIN_ON_PRICE, quoteTotals } from "@/lib/domain/quote";
 import type { Difficulty, Machine, Notification, Order, Process, Quote } from "@/lib/domain/schema";
 import { isRealDate } from "@/lib/domain/time";
-import type { Principal } from "../auth/principal";
-import { badRequest, conflict, notFound } from "../http";
+import { isOwner, type Principal } from "../auth/principal";
+import { badRequest, conflict, notFound, forbidden } from "../http";
 import { getDb } from "../store";
 import { actorOf, audit, folio, newId, nextSeq, nowIso, pushNotification, track } from "./common";
 import { createOrderIn, leastLoadedMachine } from "./orders";
@@ -65,7 +65,7 @@ function rateFor(process: Process, machineId: string | null, machines: Machine[]
   return machine && machine.hourlyRate > 0 ? machine.hourlyRate : rates[process];
 }
 
-function lines(input: Pick<QuoteInput, "materials" | "labor">, previous: Quote | null, rates: Record<Process, number>, machines: Machine[]) {
+function lines(input: Pick<QuoteInput, "materials" | "labor">, previous: Quote | null, rates: Record<Process, number>, machines: Machine[], owner: boolean) {
   return {
     materials: input.materials.map((m) => ({
       id: m.id && previous?.materials.some((p) => p.id === m.id) ? m.id : newId(),
@@ -84,7 +84,14 @@ function lines(input: Pick<QuoteInput, "materials" | "labor">, previous: Quote |
         description: l.description,
         hours: l.hours,
         // Rates are copied into the quote: later tariff changes never alter a sent price.
-        rate: l.rate ?? rateFor(process, machine?.id ?? null, machines, rates),
+        rate: (() => {
+          const official = rateFor(process, machine?.id ?? null, machines, rates);
+          if (l.rate == null || l.rate === official || owner) return l.rate ?? official;
+          // Coordinación no inventa tarifas: puede conservar la que ya tenía esa línea, no poner otra.
+          const kept = l.id ? previous?.labor.find((p) => p.id === l.id)?.rate : undefined;
+          if (kept === l.rate) return l.rate;
+          throw forbidden("Los precios y las tarifas los fija gerencia. Deja la tarifa de la máquina o pide a gerencia una tarifa especial.");
+        })(),
       };
     }),
   };
@@ -122,7 +129,7 @@ export async function createQuote(principal: Principal, input: QuoteInput) {
       title: input.title,
       description: input.description,
       quantity: input.quantity,
-      ...lines(input, null, production.processRates, docs.machines.items),
+      ...lines(input, null, production.processRates, docs.machines.items, isOwner(principal)),
       difficulty: input.difficulty,
       urgent: input.urgent,
       marginPct: input.marginPct ?? 0,
@@ -181,6 +188,7 @@ export async function updateQuote(principal: Principal, id: string, patch: Parti
         quote,
         docs.settings.production.processRates,
         docs.machines.items,
+        isOwner(principal),
       );
       quote.materials = next.materials;
       quote.labor = next.labor;
@@ -229,6 +237,7 @@ export interface ApproveInput {
 
 /** Cotización aprobada → orden de trabajo con su ruta de procesos e insumos. */
 export async function approveQuote(principal: Principal, id: string, input: ApproveInput) {
+  if (!isOwner(principal)) throw forbidden("Aprobar una cotización fija el precio de la orden: lo hace gerencia.");
   if (input.due && (!isRealDate(input.due.date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(input.due.time))) throw badRequest("Fecha u hora de entrega inválida.");
   return getDb().transact(
     ["quotes", "orders", "tasks", "machines", "positions", "clients", "attachments", "notifications", "audit"],

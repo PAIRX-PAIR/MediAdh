@@ -6,7 +6,7 @@ import { liquidate, overlapsAnother, quincenaByKey, quincenaOf, shiftQuincena, t
 import type { Attendance, Database, User } from "@/lib/domain/schema";
 import { isRealDate, timeInZone, todayIn } from "@/lib/domain/time";
 import { isOwner, type Principal } from "../auth/principal";
-import { badRequest, notFound } from "../http";
+import { badRequest, notFound, forbidden } from "../http";
 import { getDb } from "../store";
 import { actorOf, audit, newId, nowIso, track } from "./common";
 
@@ -195,6 +195,7 @@ function validateEntry(input: Pick<AttendanceInput, "date" | "start" | "end">) {
 }
 
 export async function createAttendance(principal: Principal, input: AttendanceInput): Promise<Attendance> {
+  if (input.userId === principal.user.id && !isOwner(principal)) throw forbidden("Tus propias horas las registra gerencia.");
   validateEntry(input);
   const actor = actorOf(principal);
   return getDb().transact(["attendance", "users", "audit"], "Registra horas", ({ attendance, users, audit: log }) => {
@@ -226,6 +227,7 @@ export async function createAttendance(principal: Principal, input: AttendanceIn
 }
 
 export async function updateAttendance(principal: Principal, id: string, patch: Partial<Omit<AttendanceInput, "userId">>): Promise<Attendance> {
+  if (!isOwner(principal)) throw forbidden("Corregir horas ya registradas es de gerencia: afecta la nómina.");
   const actor = actorOf(principal);
   return getDb().transact(["attendance", "audit"], "Corrige registro de horas", ({ attendance, audit: log }) => {
     const entry = attendance.items.find((e) => e.id === id);
@@ -244,6 +246,7 @@ export async function updateAttendance(principal: Principal, id: string, patch: 
 }
 
 export async function deleteAttendance(principal: Principal, id: string) {
+  if (!isOwner(principal)) throw forbidden("Borrar horas registradas es de gerencia: afecta la nómina.");
   await getDb().transact(["attendance", "audit"], "Elimina registro de horas", ({ attendance, audit: log }) => {
     const entry = attendance.items.find((e) => e.id === id);
     if (!entry) throw notFound();

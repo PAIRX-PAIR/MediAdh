@@ -4,8 +4,8 @@ import { MACHINE_STATE_LABEL } from "@/lib/domain/labels";
 import { parseNit } from "@/lib/domain/nit";
 import type { Client, ClientKind, IpcEntry, Machine, MachineState, Notification, Process } from "@/lib/domain/schema";
 import { isRealDate } from "@/lib/domain/time";
-import type { Principal } from "../auth/principal";
-import { badRequest, conflict, notFound } from "../http";
+import { isOwner, type Principal } from "../auth/principal";
+import { badRequest, conflict, notFound, forbidden } from "../http";
 import { getDb } from "../store";
 import { actorOf, audit, newId, nowIso, pushNotification, track } from "./common";
 
@@ -145,6 +145,7 @@ export async function createMachine(principal: Principal, input: MachineInput) {
   return getDb().transact(["machines", "positions", "audit"], "Agrega una máquina", (docs) => {
     if (input.positionId && !docs.positions.items.some((p) => p.id === input.positionId)) throw badRequest("El puesto no existe.");
     if (input.state === "mantenimiento") throw badRequest("Una máquina nueva no puede empezar en mantenimiento.");
+    if (input.hourlyRate > 0 && !isOwner(principal)) throw forbidden("Los precios y las tarifas los fija gerencia. Crea la máquina con tarifa $0 y gerencia la pone.");
     const now = nowIso();
     const machine: Machine = {
       id: newId(),
@@ -188,6 +189,7 @@ export async function updateMachine(principal: Principal, id: string, patch: Mac
     const machine = docs.machines.items.find((m) => m.id === id);
     if (!machine) throw notFound("Máquina no encontrada.");
     if (patch.positionId && !docs.positions.items.some((p) => p.id === patch.positionId)) throw badRequest("El puesto no existe.");
+    if (patch.hourlyRate !== undefined && patch.hourlyRate !== machine.hourlyRate && !isOwner(principal)) throw forbidden("Los precios y las tarifas los fija gerencia.");
     const before = { ...machine };
     const actor = actorOf(principal);
     const now = nowIso();

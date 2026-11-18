@@ -2,7 +2,7 @@ import "server-only";
 import { adjustForInflation } from "@/lib/domain/ipc";
 import { lastMonths, machineKpis, managementIndex, monthKey, monthlyKpis, sumKpis, type KpiContext } from "@/lib/domain/kpi";
 import { orderMoney } from "@/lib/domain/lifecycle";
-import type { Principal } from "../auth/principal";
+import { isOwner, type Principal } from "../auth/principal";
 import { getDb } from "../store";
 
 /**
@@ -42,15 +42,18 @@ export async function buildIndicators(principal: Principal, monthsBack: number) 
     return { month, orders: count, price, cost, margin: price - cost, adjusted };
   });
 
+  // El dinero es de gerencia: coordinación ve cumplimiento y capacidad, no ventas ni márgenes.
+  const owner = isOwner(principal);
   return {
+    moneyHidden: !owner,
     months,
-    monthly,
-    period: { ...period, index: managementIndex(period) },
+    monthly: owner ? monthly : monthly.map((k) => ({ ...k, revenue: 0 })),
+    period: { ...period, revenue: owner ? period.revenue : 0, index: managementIndex(period) },
     perMachine: machineKpis(orders.items, ctx, months),
     machines: machines.items
       .sort((a, b) => a.order - b.order)
       .map((m) => ({ id: m.id, name: m.name, process: m.process, state: m.state, activeSince: m.activeSince })),
-    money,
+    money: owner ? money : [],
     ipcAvailable: ipc.items.length > 0,
   };
 }

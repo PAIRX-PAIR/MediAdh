@@ -61,7 +61,7 @@ export function clientIp(headers: Headers): string {
   return normalizeIp(
     headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() ||
       headers.get("x-real-ip")?.trim() ||
-      headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() ||
       "unknown",
   );
 }
