@@ -115,6 +115,13 @@ export const GET = route({ access: "admin" }, async ({ req, principal }) => {
   }
 
   const name = `smi-${kind}-${principal.today}.csv`;
+  if (!isOwner(principal)) {
+    // Coordinación exporta lo operativo; las columnas de dinero se quitan.
+    const money = /precio|costo|valor|margen|ipc|ganancia|tarifa|pago|sueldo|salario/i;
+    const header = rows[0] ?? [];
+    const keep = header.map((h, i) => (typeof h === "string" && money.test(h) ? -1 : i)).filter((i) => i >= 0);
+    rows = rows.map((r) => (r.length === header.length ? keep.map((i) => r[i] ?? null) : r));
+  }
   return new Response(csv(rows), {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",

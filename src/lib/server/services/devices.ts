@@ -24,7 +24,8 @@ import type { RequestInput } from "./work";
  */
 
 export const DEVICE_COOKIE = isProduction ? "__Host-smi_device" : "smi_device";
-const DEVICE_DAYS = 365;
+const DEVICE_DAYS = 90;
+const MAX_DEVICES_PER_PERSON = 3;
 const PENDING_MINUTES = 10;
 /** Anonymous requests each write a commit: cap the open ones so a flood cannot exhaust GitHub's write limit. */
 const MAX_PENDING_DEVICES = 30;
@@ -93,6 +94,8 @@ async function resolveDevice(): Promise<{ device: Device | null; state: DeviceSt
   if (device.status === "aprobado") {
     const user = users.items.find((u) => u.id === device.userId);
     if (!user || user.status !== "active") return { device, state: { status: "revocado" } };
+    // Un celular autorizado vale 90 días: después se vuelve a autorizar con un código nuevo.
+    if (device.approvedAt && Date.parse(device.approvedAt) + DEVICE_DAYS * 86_400_000 <= Date.now()) return { device, state: { status: "vencido" } };
     return { device, state: { status: "aprobado", operator: user.displayName } };
   }
   if (Date.parse(device.expiresAt) <= Date.now()) return { device, state: { status: "vencido" } };
@@ -175,6 +178,8 @@ export async function approveDevice(principal: Principal, rawCode: string, userI
     if (Date.parse(device.expiresAt) <= Date.now()) throw new HttpError(410, "El código venció. Pide al operario que genere otro.", "device_code_expired");
     const operator = operatorsOf(docs, principal.today).find((o) => o.userId === userId);
     if (!operator) throw badRequest("Esa persona no tiene un puesto de operario vigente.");
+    const active = docs.devices.items.filter((d) => d.status === "aprobado" && d.userId === userId && d.approvedAt && Date.parse(d.approvedAt) + DEVICE_DAYS * 86_400_000 > Date.now());
+    if (active.length >= MAX_DEVICES_PER_PERSON) throw badRequest(`${operator.name} ya tiene ${MAX_DEVICES_PER_PERSON} celulares autorizados. Revoca uno antes de autorizar otro.`);
     device.status = "aprobado";
     device.userId = userId;
     device.approvedBy = principal.user.id;

@@ -102,7 +102,7 @@ export async function readSessionToken(): Promise<string | null> {
  * password is always verified, so this only lifts the lockout.
  */
 export const TRUST_COOKIE = isProduction ? "__Host-smi_trust" : "smi_trust";
-const TRUST_DAYS = 90;
+const TRUST_DAYS = 30;
 const TRUST_AUDIENCE = "smi-taller-trust";
 
 /** Bound to the account's sessionVersion: "cerrar sesión en todos" or a password change revokes it too. */

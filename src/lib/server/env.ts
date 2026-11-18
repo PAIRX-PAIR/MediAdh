@@ -25,7 +25,8 @@ export function dataBackend(): DataBackend {
 
 /** Demo mode: in-memory data seeded with sample records, public demo credentials. */
 export function isDemoMode(): boolean {
-  return dataBackend() === "memory" && process.env.DEMO_SEED !== "off";
+  if (dataBackend() !== "memory") return false;
+  return isProduction ? process.env.DEMO_SEED === "on" : process.env.DEMO_SEED !== "off";
 }
 
 export function githubConfig() {

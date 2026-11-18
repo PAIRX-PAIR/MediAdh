@@ -347,5 +347,6 @@ export async function setupFirstAdmin(
 
 export async function setupStatus() {
   const { users } = await getDb().read(["users"]);
-  return { needsSetup: bootstrapAdminConfigs().length === 0 && !users.items.some((u) => u.kind === "admin"), setupEnabled: Boolean(process.env.SETUP_KEY) };
+  const needsSetup = bootstrapAdminConfigs().length === 0 && !users.items.some((u) => u.kind === "admin");
+  return { needsSetup, setupEnabled: needsSetup && Boolean(process.env.SETUP_KEY) };
 }

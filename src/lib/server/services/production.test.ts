@@ -752,9 +752,38 @@ describe("autorización de fechas: propone producción, decide gerencia", () => 
   it("quien no es gerencia no compromete la fecha: la deja como propuesta", async () => {
     const { admin, coord } = await withCoordinator();
     const due = { date: addDays(admin.today, 10), time: "17:00" };
-    const { order } = await orders.createOrder(coord, baseOrder({ due }));
+    const { order } = await orders.createOrder(coord, baseOrder({ due, price: null }));
     expect(order.due).toBeNull();
     expect(order.dueProposal).toMatchObject({ status: "pendiente_aprobacion", date: due.date, time: "17:00", previous: null });
+  });
+
+  it("el dinero lo fija gerencia: coordinación no cambia precios, tarifas ni aprueba cotizaciones", async () => {
+    const { admin, coord } = await withCoordinator();
+    const { order } = await orders.createOrder(admin, baseOrder({ due: null }));
+    await expect(orders.createOrder(coord, baseOrder({ due: null, price: 5_000 }))).rejects.toThrow(/gerencia/);
+    await expect(orders.updateOrder(coord, order.id, { price: 1 })).rejects.toThrow(/gerencia/);
+    await orders.updateOrder(coord, order.id, { price: order.price, title: "Mismo precio, otro título" });
+    const machine = (await db.read(["machines"])).machines.items[0]!;
+    await expect(catalog.updateMachine(coord, machine.id, { hourlyRate: machine.hourlyRate + 1 })).rejects.toThrow(/gerencia/);
+    type Q = Parameters<typeof quotes.createQuote>[1];
+    const input = { clientId: null, clientName: "Cliente", title: "Eje", description: "", quantity: 1, materials: [], difficulty: 1, urgent: false, marginPct: 30, ivaPct: 19, validDays: 15 } as unknown as Omit<Q, "labor">;
+    await expect(quotes.createQuote(coord, { ...input, labor: [{ process: machine.process, machineId: machine.id, description: "", hours: 2, rate: 1 }] })).rejects.toThrow(/gerencia/);
+    const quote = await quotes.createQuote(coord, { ...input, labor: [{ process: machine.process, machineId: machine.id, description: "", hours: 2, rate: null }] });
+    await expect(quotes.approveQuote(coord, quote.id, { due: null } as Parameters<typeof quotes.approveQuote>[2])).rejects.toThrow(/gerencia/);
+  });
+
+  it("nadie que no sea gerencia registra sus propias horas ni corrige o borra horas", async () => {
+    const { coord } = await withCoordinator();
+    const payroll = await import("./payroll");
+    await expect(payroll.createAttendance(coord, { userId: coord.user.id, date: addDays(coord.today, -1), start: "06:00", end: "22:00", note: "" })).rejects.toThrow(/gerencia/);
+    await expect(payroll.updateAttendance(coord, "cualquiera", { start: "06:00" })).rejects.toThrow(/gerencia/);
+    await expect(payroll.deleteAttendance(coord, "cualquiera")).rejects.toThrow(/gerencia/);
+  });
+
+  it("un operario no borra tareas de otro puesto", async () => {
+    const { admin, f1 } = await withCoordinator();
+    const { task } = await work.createTask(admin, { title: "Del tornero", description: "", positionId: "tornero-1", priority: "normal", dueDate: null, piece: null, quantity: null, checklist: [] });
+    await expect(work.deleteTask(f1, task.id)).rejects.toThrow(/tu puesto/);
   });
 
   it("una propuesta pendiente no cambia la fecha; solo gerencia la aprueba y la compromete", async () => {

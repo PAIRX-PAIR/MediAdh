@@ -145,7 +145,7 @@ function Dashboard({ data, stale }: { data: Indicators; stale: boolean }) {
         <StatTile label="Garantías" value={p.warranties} tone={p.warranties ? "blocked" : "done"} hint={`${p.returns} devoluciones`} />
         <StatTile label="Incumplimientos" value={p.breaches} tone={p.breaches ? "blocked" : "done"} hint="Tarde o sin entregar" />
         <StatTile label="Uso de capacidad" value={pct(p.utilization)} hint={`${Math.round(p.hoursWorked)} de ${Math.round(p.capacityHours)} h`} />
-        <StatTile label="Entregado" value={compactCop(p.revenue)} hint={`${p.delivered} trabajos · sin IVA`} />
+        {data.moneyHidden ? <StatTile label="Entregados" value={p.delivered} hint="El valor lo ve gerencia" /> : <StatTile label="Entregado" value={compactCop(p.revenue)} hint={`${p.delivered} trabajos · sin IVA`} />}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -291,6 +291,8 @@ function Dashboard({ data, stale }: { data: Indicators; stale: boolean }) {
         </div>
       </ChartFrame>
 
+      {!data.moneyHidden && (
+
       <ChartFrame
         title="Dinero"
         subtitle={`Valor entregado por mes (antes de IVA). ${data.ipcAvailable ? "Incluye el valor a precios de hoy con el IPC." : "Carga la tabla del IPC en Ajustes para ver valores a precios de hoy."}`}
@@ -317,7 +319,7 @@ function Dashboard({ data, stale }: { data: Indicators; stale: boolean }) {
           }))}
         />
         <p className="text-xs text-muted">Eje en millones de pesos.</p>
-      </ChartFrame>
+      </ChartFrame>)}
     </div>
   );
 }
