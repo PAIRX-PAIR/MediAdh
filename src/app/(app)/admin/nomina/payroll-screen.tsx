@@ -79,6 +79,7 @@ export function PayrollScreen() {
   const totals = {
     nomina: report.lines.reduce((s, l) => s + l.earned, 0),
     seguridad: report.lines.reduce((s, l) => s + l.employerCost, 0),
+    prestaciones: report.lines.reduce((s, l) => s + l.prestaciones.total, 0),
     total: report.lines.reduce((s, l) => s + l.earned + l.employerCost, 0),
   };
   const missingSalary = money ? report.lines.filter((l) => l.monthlySalary === null) : [];
@@ -123,7 +124,7 @@ export function PayrollScreen() {
 
       <style>{`@media print { body * { visibility: hidden !important; } #nomina-impresion, #nomina-impresion * { visibility: visible !important; } #nomina-impresion { position: absolute; inset: 0 0 auto 0; } }`}</style>
       <div id="nomina-impresion" className="flex flex-col gap-4">
-      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-5">
         {money ? (
           <StatTile label="Nómina" value={formatCop(totals.nomina)} hint="Devengado de la quincena" tone="glow" icon={<Wallet />} />
         ) : (
@@ -135,7 +136,10 @@ export function PayrollScreen() {
           <StatTile label="Horas extra" value={hrs(report.lines.reduce((s, l) => s + extraHours(l), 0))} tone="pending" />
         )}
         {money ? (
-          <StatTile label="Total general" value={formatCop(totals.total)} hint="Nómina + seguridad social" />
+          <StatTile label="Valor total de las prestaciones sociales" value={formatCop(totals.prestaciones)} hint="Plus de SMI: no se descuenta del neto" />
+        ) : null}
+        {money ? (
+          <StatTile label="Costo con las prestaciones" value={formatCop(totals.total)} hint="Nómina + seguridad social" />
         ) : (
           <StatTile label="Sin salida" value={open} tone={open ? "pending" : "neutral"} />
         )}
@@ -185,6 +189,7 @@ export function PayrollScreen() {
                         [`Básico (${l.paidDays} días)`, formatCop(l.basic)],
                         ["Horas extra", `${hrs(extraHours(l))} · ${formatCop(l.extrasTotal)}`],
                         ["Auxilio de transporte", formatCop(l.transport)],
+                        ["Prestaciones sociales (plus de SMI, no se descuentan)", formatCop(l.prestaciones.total)],
                         ["Seguridad social (asumida por SMI)", formatCop(l.employerCost)],
                         ["Costo total del trabajador", formatCop(l.earned + l.employerCost)],
                         ["Neto a pagar", <strong key="net" className="text-glow">{formatCop(l.net)}</strong>],
@@ -337,7 +342,7 @@ function PersonModal({ report, line, onClose, onChanged }: { report: PayrollRepo
                 </li>
               )}
               <li className="flex justify-between gap-3 border-t border-line pt-1 font-semibold">
-                <span className="text-ink">Neto a pagar</span>
+                <span className="text-ink">Neto a pagar (sin descontar prestaciones ni seguridad social)</span>
                 <span className="tabular text-glow">{formatCop(line.net)}</span>
               </li>
             </ul>
@@ -358,6 +363,10 @@ function PersonModal({ report, line, onClose, onChanged }: { report: PayrollRepo
               <li className="flex justify-between gap-3">
                 <span className="text-ink-soft">Vacaciones ({report.settings.vacacionesPct} % del básico)</span>
                 <span className="tabular text-ink">{formatCop(line.prestaciones.vacaciones)}</span>
+              </li>
+              <li className="flex justify-between gap-3 border-t border-line pt-1 font-semibold">
+                <span className="text-ink">Total prestaciones sociales (plus de SMI, no se descuentan del neto)</span>
+                <span className="tabular text-ink">{formatCop(line.prestaciones.total)}</span>
               </li>
               <li className="flex justify-between gap-3">
                 <span className="text-ink-soft">Aportes del empleador (pensión, caja, ARL{report.settings.exoneracionParafiscales ? "" : ", salud, SENA, ICBF"})</span>
