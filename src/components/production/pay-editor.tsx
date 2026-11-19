@@ -69,8 +69,8 @@ export function PayEditorModal({ userId, name, onClose, onSaved }: { userId: str
                 <Row label="Horas extra" value={formatCop(line.extrasTotal)} />
                 <Row label="Auxilio de transporte" value={formatCop(line.transport)} />
                 <Row label="Bonificaciones" value={formatCop(line.bonuses)} />
-                <Row label="Salud y pensión" value={`− ${formatCop(line.health + line.pension)}`} />
                 <Row label="Descuentos" value={`− ${formatCop(line.otherDeductions)}`} />
+                <Row label="Seguridad social (asumida por SMI, no se descuenta)" value={formatCop(line.employerCost)} />
                 <div className="mt-1 flex justify-between border-t border-line pt-1 font-semibold">
                   <dt className="text-ink">Neto a pagar (pago {formatDate(report.quincena.payDate, { day: "numeric", month: "short" })})</dt>
                   <dd className="text-glow">{formatCop(line.net)}</dd>

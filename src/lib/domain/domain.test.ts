@@ -75,8 +75,6 @@ describe("nómina quincenal", () => {
     nightStart: "19:00",
     nightEnd: "06:00",
     roundingMinutes: 15,
-    healthPct: 4,
-    pensionPct: 4,
     transportAllowance: 200_000,
     autoAttendance: true,
   });
@@ -164,7 +162,7 @@ describe("nómina quincenal", () => {
       ],
     });
     // Salud y pensión sobre el básico (1.050.000): 84.000; el bono no entra en esa base.
-    expect(line).toMatchObject({ bonuses: 100_000, otherDeductions: 300_000, earned: 1_150_000, health: 42_000, pension: 42_000, net: 766_000 });
+    expect(line).toMatchObject({ bonuses: 100_000, otherDeductions: 300_000, earned: 1_150_000, net: 850_000 });
     expect(line!.adjustments.map((a) => a.concept)).toEqual(["Meta", "Anticipo"]);
   });
 
@@ -176,7 +174,7 @@ describe("nómina quincenal", () => {
       calendar: smi,
       settings,
     });
-    expect(line).toMatchObject({ hourlyValue: 10_000, basic: 1_050_000, extrasTotal: 18_750, transport: 100_000, health: 42_750, pension: 42_750, net: 1_083_250 });
+    expect(line).toMatchObject({ hourlyValue: 10_000, basic: 1_050_000, extrasTotal: 18_750, transport: 100_000, earned: 1_168_750, net: 1_168_750 });
     expect(line!.scheduledHours).toBe(85); // 1–15 oct 2026 con el festivo del lunes 12
   });
 
@@ -193,8 +191,9 @@ describe("nómina quincenal", () => {
     const [full] = liquidate({ ...args, settings: { ...settings, exoneracionParafiscales: false } });
     expect(full!.aportes).toBe(315_231);
     expect(full!.employerCost).toBe(544_446);
-    // El neto a pagar no cambia: las prestaciones son costo del taller, no descuento al trabajador.
-    expect(line!.net).toBe(line!.earned - line!.health - line!.pension);
+    // El neto es el devengado menos descuentos puntuales: la seguridad social no se descuenta del trabajador.
+    expect(line!.net).toBe(line!.earned - line!.otherDeductions);
+    expect(line!.earned + line!.employerCost).toBe(line!.earned + 402_696);
   });
 });
 
