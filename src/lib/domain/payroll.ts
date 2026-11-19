@@ -257,9 +257,9 @@ export interface PayrollLine {
   /** Descuentos puntuales (anticipos, préstamos…) taken off the net pay. */
   otherDeductions: number;
   adjustments: Array<Pick<PayAdjustment, "id" | "kind" | "concept" | "amount">>;
+  /** NÓMINA: devengado de la quincena (salario, extras, auxilio y bonificaciones). */
   earned: number;
-  health: number;
-  pension: number;
+  /** Neto a pagar: el devengado menos descuentos puntuales. La seguridad social la asume la empresa (no se descuenta). */
   net: number;
   /** Prestaciones sociales de la quincena (provisión: se pagan en otra fecha, pero cuestan hoy). */
   prestaciones: { cesantias: number; intereses: number; prima: number; vacaciones: number; total: number };
@@ -304,10 +304,8 @@ export function liquidate(input: {
     const basic = peso((salary / 30) * paidDays);
     const extrasTotal = HOUR_KINDS.reduce((sum, k) => sum + amounts[k], 0);
     const transport = person.transportAllowance ? peso((settings.transportAllowance / 30) * paidDays) : 0;
-    // Social security contributions are not charged on the transport allowance.
+    // La seguridad social de la empresa no incluye el auxilio de transporte.
     const base = basic + extrasTotal;
-    const health = peso((base * settings.healthPct) / 100);
-    const pension = peso((base * settings.pensionPct) / 100);
     const adjustments = (input.adjustments ?? []).filter((a) => a.userId === person.id && a.quincena === quincena.key);
     const bonuses = adjustments.filter((a) => a.kind === "bono").reduce((s, a) => s + a.amount, 0);
     const otherDeductions = adjustments.filter((a) => a.kind === "descuento").reduce((s, a) => s + a.amount, 0);
@@ -340,9 +338,7 @@ export function liquidate(input: {
       otherDeductions,
       adjustments: adjustments.map(({ id, kind, concept, amount }) => ({ id, kind, concept, amount })),
       earned,
-      health,
-      pension,
-      net: earned - health - pension - otherDeductions,
+      net: earned - otherDeductions,
       prestaciones,
       aportes,
       employerCost: prestaciones.total + aportes,

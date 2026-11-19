@@ -582,9 +582,9 @@ describe("ganancias del mes", () => {
     const report = await finance.financeReport(admin, null);
     expect(report).toMatchObject({ sales: 2_000_000, supplies: 300_000 });
     const tornero = report.payroll.find((p) => p.name === "Tornero Uno")!;
-    // Sin horas extra: 1.050.000 por quincena menos salud y pensión (8 %).
-    expect(tornero.q1).toMatchObject({ earned: 1_050_000, net: 966_000 });
-    expect(tornero.net).toBe(1_932_000);
+    // Sin horas extra: 1.050.000 por quincena; la seguridad social no se descuenta del neto.
+    expect(tornero.q1).toMatchObject({ earned: 1_050_000, net: 1_050_000 });
+    expect(tornero.net).toBe(2_100_000);
     // Prestaciones y aportes del empleador: cesantías, intereses, prima, vacaciones, pensión, caja y ARL (sin salud, SENA ni ICBF por exoneración).
     expect(tornero.employer).toBeGreaterThan(0);
     expect(report.profit).toBe(2_000_000 - 300_000 - report.payrollQ1 - report.payrollQ2 - report.employerCost);

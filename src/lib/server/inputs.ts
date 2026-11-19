@@ -223,8 +223,6 @@ const payrollSettingsPatch = z
     nightStart: hhmm,
     nightEnd: hhmm,
     roundingMinutes: z.number().int().min(0).max(60),
-    healthPct: z.number().min(0).max(100),
-    pensionPct: z.number().min(0).max(100),
     transportAllowance: money,
     autoAttendance: z.boolean(),
     cesantiasPct: pct100,

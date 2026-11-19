@@ -696,9 +696,6 @@ export const payrollSettingsSchema = z.object({
   nightEnd: hhmm.default("06:00"),
   /** Overtime per day is counted in blocks of this many minutes (0 = exact). */
   roundingMinutes: z.number().int().min(0).max(60).default(15),
-  /** Employee deductions over salary + overtime (%). */
-  healthPct: z.number().min(0).max(100).default(4),
-  pensionPct: z.number().min(0).max(100).default(4),
   /** Monthly auxilio de transporte (COP) for those who have it; 0 until the admin sets it. */
   transportAllowance: z.number().min(0).default(0),
   /** Each workday adds the schedule hours by itself (no clock-in needed); records and faltas replace it. */

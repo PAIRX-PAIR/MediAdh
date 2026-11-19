@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ChevronLeft, ChevronRight, Download, Plus, Save, Settings2, Trash2, Wallet } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Download, Plus, Printer, Save, Settings2, Trash2, Wallet } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { KeyValues, MoneyInput, NumberInput, PageHeader, StatTile, TimeInput } from "@/components/ui/kit";
@@ -76,6 +76,11 @@ export function PayrollScreen() {
   }
 
   const money = !report.moneyHidden;
+  const totals = {
+    nomina: report.lines.reduce((s, l) => s + l.earned, 0),
+    seguridad: report.lines.reduce((s, l) => s + l.employerCost, 0),
+    total: report.lines.reduce((s, l) => s + l.earned + l.employerCost, 0),
+  };
   const missingSalary = money ? report.lines.filter((l) => l.monthlySalary === null) : [];
   const open = report.lines.reduce((sum, l) => sum + l.openEntries, 0);
   const person = report.lines.find((l) => l.userId === personId) ?? null;
@@ -116,19 +121,21 @@ export function PayrollScreen() {
         }
       />
 
+      <style>{`@media print { body * { visibility: hidden !important; } #nomina-impresion, #nomina-impresion * { visibility: visible !important; } #nomina-impresion { position: absolute; inset: 0 0 auto 0; } }`}</style>
+      <div id="nomina-impresion" className="flex flex-col gap-4">
       <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
         {money ? (
-          <StatTile label="Neto a pagar" value={formatCop(report.lines.reduce((s, l) => s + l.net, 0))} tone="glow" icon={<Wallet />} />
+          <StatTile label="Nómina" value={formatCop(totals.nomina)} hint="Devengado de la quincena" tone="glow" icon={<Wallet />} />
         ) : (
           <StatTile label="Horas trabajadas" value={hrs(report.lines.reduce((s, l) => s + l.workedHours, 0))} tone="glow" />
         )}
-        <StatTile label="Horas extra" value={hrs(report.lines.reduce((s, l) => s + extraHours(l), 0))} tone="pending" />
         {money ? (
-          <StatTile
-            label="Costo con prestaciones"
-            value={formatCop(report.lines.reduce((s, l) => s + l.earned + l.employerCost, 0))}
-            hint="Devengado + prestaciones + aportes"
-          />
+          <StatTile label="Seguridad social" value={formatCop(totals.seguridad)} hint="Asumida por SMI, no se descuenta" tone="pending" />
+        ) : (
+          <StatTile label="Horas extra" value={hrs(report.lines.reduce((s, l) => s + extraHours(l), 0))} tone="pending" />
+        )}
+        {money ? (
+          <StatTile label="Total general" value={formatCop(totals.total)} hint="Nómina + seguridad social" />
         ) : (
           <StatTile label="Sin salida" value={open} tone={open ? "pending" : "neutral"} />
         )}
@@ -178,7 +185,8 @@ export function PayrollScreen() {
                         [`Básico (${l.paidDays} días)`, formatCop(l.basic)],
                         ["Horas extra", `${hrs(extraHours(l))} · ${formatCop(l.extrasTotal)}`],
                         ["Auxilio de transporte", formatCop(l.transport)],
-                        ["Salud + pensión", `− ${formatCop(l.health + l.pension)}`],
+                        ["Seguridad social (asumida por SMI)", formatCop(l.employerCost)],
+                        ["Costo total del trabajador", formatCop(l.earned + l.employerCost)],
                         ["Neto a pagar", <strong key="net" className="text-glow">{formatCop(l.net)}</strong>],
                       ]
                     : [
@@ -196,6 +204,42 @@ export function PayrollScreen() {
           ))}
         </div>
       )}
+
+      {money && (
+        <section aria-labelledby="consolidado-title" className="rounded-xl border border-line p-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 id="consolidado-title" className="font-display text-lg font-semibold text-ink">
+              Consolidado de la quincena
+            </h2>
+            <Button className="print:hidden" variant="secondary" size="sm" icon={<Printer className="size-4" />} onClick={() => window.print()}>
+              Imprimir
+            </Button>
+          </div>
+          <table className="tabular w-full text-sm">
+            <thead>
+              <tr className="border-b border-line text-left text-muted">
+                <th scope="col" className="py-2 font-semibold">Concepto</th>
+                <th scope="col" className="py-2 text-right font-semibold">Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b border-line">
+                <td className="py-2 text-ink">NÓMINA</td>
+                <td className="py-2 text-right text-ink">{formatCop(totals.nomina)}</td>
+              </tr>
+              <tr className="border-b border-line">
+                <td className="py-2 text-ink">SEGURIDAD SOCIAL</td>
+                <td className="py-2 text-right text-ink">{formatCop(totals.seguridad)}</td>
+              </tr>
+              <tr className="font-semibold">
+                <td className="py-2 text-ink">TOTAL GENERAL</td>
+                <td className="py-2 text-right text-glow">{formatCop(totals.total)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      )}
+      </div>
 
       <p className="text-xs text-muted">
         Todo lo trabajado fuera del horario del taller es hora extra; domingos y festivos suman el recargo dominical.
@@ -286,12 +330,6 @@ function PersonModal({ report, line, onClose, onChanged }: { report: PayrollRepo
                 <span className="text-ink-soft">Devengado</span>
                 <span className="tabular text-ink">{formatCop(line.earned)}</span>
               </li>
-              <li className="flex justify-between gap-3">
-                <span className="text-ink-soft">
-                  Salud ({report.settings.healthPct} %) y pensión ({report.settings.pensionPct} %)
-                </span>
-                <span className="tabular text-ink">− {formatCop(line.health + line.pension)}</span>
-              </li>
               {line.otherDeductions > 0 && (
                 <li className="flex justify-between gap-3">
                   <span className="text-ink-soft">Descuentos (anticipos, préstamos…)</span>
@@ -303,7 +341,7 @@ function PersonModal({ report, line, onClose, onChanged }: { report: PayrollRepo
                 <span className="tabular text-glow">{formatCop(line.net)}</span>
               </li>
             </ul>
-            <h4 className="mb-2 mt-4 text-sm font-semibold text-ink">Lo que cuesta al taller</h4>
+            <h4 className="mb-2 mt-4 text-sm font-semibold text-ink">Seguridad social y prestaciones (asumidas por SMI)</h4>
             <ul className="flex flex-col gap-1 text-sm">
               <li className="flex justify-between gap-3">
                 <span className="text-ink-soft">Cesantías ({report.settings.cesantiasPct} %)</span>
@@ -326,7 +364,7 @@ function PersonModal({ report, line, onClose, onChanged }: { report: PayrollRepo
                 <span className="tabular text-ink">{formatCop(line.aportes)}</span>
               </li>
               <li className="flex justify-between gap-3 border-t border-line pt-1 font-semibold">
-                <span className="text-ink">Costo total para el taller</span>
+                <span className="text-ink">Costo total del trabajador (nómina + seguridad social)</span>
                 <span className="tabular text-glow">{formatCop(line.earned + line.employerCost)}</span>
               </li>
             </ul>
@@ -529,8 +567,6 @@ function RulesModal({ settings, onClose, onSaved }: { settings: PayrollSettings;
           {(id, d) => <Input id={id} aria-describedby={d} type="time" value={form.nightStart} onChange={(e) => set("nightStart", e.target.value)} />}
         </Field>
         <Field label="Fin de la jornada nocturna">{(id) => <Input id={id} type="time" value={form.nightEnd} onChange={(e) => set("nightEnd", e.target.value)} />}</Field>
-        {pct("healthPct", "Descuento salud (trabajador)", "Ley: 4 %")}
-        {pct("pensionPct", "Descuento pensión (trabajador)", "Ley: 4 %")}
         <h3 className="font-semibold text-ink sm:col-span-2">Prestaciones sociales (se provisionan cada quincena)</h3>
         {pct("cesantiasPct", "Cesantías", "Ley: 8,33 % del salario, horas extra y auxilio")}
         {pct("interesesCesantiasPct", "Intereses sobre cesantías", "Ley: 12 % anual de cesantías = 1 % mensual")}
