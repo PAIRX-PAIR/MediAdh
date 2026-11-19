@@ -130,6 +130,8 @@ export function payrollPeopleFor(docs: Pick<Database, "users" | "positions" | "i
         username: u.username,
         monthlySalary: u.monthlySalary,
         transportAllowance: u.transportAllowance,
+        // Pensionados sin seguridad social de SMI: sin prestaciones ni aportes.
+        conPrestaciones: u.seguridadSocialSmi,
         positionTitle: positionOf(u),
         employment: employment.length ? employment : undefined,
       };
@@ -273,12 +275,17 @@ export async function deleteAttendance(principal: Principal, id: string) {
 }
 
 /** Salary and transport allowance of a person (admin only; the amount stays out of the audit log). */
-export async function setPay(principal: Principal, userId: string, input: { monthlySalary?: number | null; transportAllowance?: boolean }) {
+export async function setPay(
+  principal: Principal,
+  userId: string,
+  input: { monthlySalary?: number | null; transportAllowance?: boolean; seguridadSocial?: boolean },
+) {
   await getDb().transact(["users", "audit"], "Actualiza sueldo", ({ users, audit: log }) => {
     const user = users.items.find((u) => u.id === userId);
     if (!user) throw notFound();
     if (input.monthlySalary !== undefined) user.monthlySalary = input.monthlySalary;
     if (input.transportAllowance !== undefined) user.transportAllowance = input.transportAllowance;
+    if (input.seguridadSocial !== undefined) user.seguridadSocialSmi = input.seguridadSocial;
     user.updatedAt = nowIso();
     audit(log, actorOf(principal), "sueldo_actualizado", user.id, user.username);
   });

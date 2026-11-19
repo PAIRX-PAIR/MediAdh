@@ -307,6 +307,7 @@ export const payInput = z
   .object({
     monthlySalary: z.union([money, z.null()]),
     transportAllowance: z.boolean(),
+    seguridadSocial: z.boolean(),
   })
   .partial();
 

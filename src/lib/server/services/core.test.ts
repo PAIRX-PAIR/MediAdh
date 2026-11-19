@@ -77,6 +77,7 @@ async function seedAdmin() {
       lastLoginAt: null,
       monthlySalary: null,
       transportAllowance: false,
+      seguridadSocialSmi: true,
       adminScope: "total",
     });
   });

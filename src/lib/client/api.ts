@@ -45,6 +45,8 @@ export interface PayrollPersonView {
   username: string;
   monthlySalary: number | null;
   transportAllowance: boolean;
+  /** false = SMI no paga su seguridad social ni prestaciones (pensionado o por honorarios). */
+  conPrestaciones?: boolean;
   positionTitle: string | null;
 }
 
@@ -535,7 +537,7 @@ export const api = {
 
   payroll: {
     report: (quincena?: string) => request<PayrollReport>(`/api/admin/nomina${quincena ? `?quincena=${encodeURIComponent(quincena)}` : ""}`),
-    setPay: (userId: string, input: { monthlySalary?: number | null; transportAllowance?: boolean }) =>
+    setPay: (userId: string, input: { monthlySalary?: number | null; transportAllowance?: boolean; seguridadSocial?: boolean }) =>
       request<{ ok: true }>(`/api/admin/users/${encodeURIComponent(userId)}/pay`, { method: "PATCH", body: input }),
     updateSettings: (payroll: Partial<PayrollSettings>) => request<{ ok: true }>("/api/admin/settings", { method: "PATCH", body: { payroll } }),
     addAdjustment: (input: { userId: string; quincena: string; kind: "bono" | "descuento"; concept: string; amount: number }) =>

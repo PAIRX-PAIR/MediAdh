@@ -77,6 +77,7 @@ export async function ensureBootstrapAdmin(username: string) {
       lastLoginAt: null,
       monthlySalary: null,
       transportAllowance: false,
+      seguridadSocialSmi: true,
       adminScope: "total",
     };
     draft.items.push(user);
@@ -229,6 +230,7 @@ export async function register(input: RegisterInput, ip: string): Promise<{ noti
       lastLoginAt: null,
       monthlySalary: null,
       transportAllowance: false,
+      seguridadSocialSmi: true,
       adminScope: "total",
     };
     users.items.push(user);
@@ -337,6 +339,7 @@ export async function setupFirstAdmin(
       lastLoginAt: null,
       monthlySalary: null,
       transportAllowance: false,
+      seguridadSocialSmi: true,
       adminScope: "total",
     };
     users.items.push(user);

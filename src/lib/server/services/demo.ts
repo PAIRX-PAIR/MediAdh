@@ -65,6 +65,7 @@ export async function seedDemo(raw: RawStore) {
     lastLoginAt: null,
     monthlySalary: null,
     transportAllowance: false,
+    seguridadSocialSmi: true,
     adminScope: "total",
     ...over,
   });

@@ -183,6 +183,9 @@ export function PayrollScreen() {
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   {money && l.monthlySalary === null && <Chip tone="pending">Falta sueldo</Chip>}
+                  {money && !l.userId.startsWith("ind-") && report.people.find((p) => p.id === l.userId)?.conPrestaciones === false && (
+                    <Chip tone="neutral">Sin seguridad social de SMI</Chip>
+                  )}
                   {l.openEntries > 0 && <Chip tone="blocked">{l.openEntries} sin salida</Chip>}
                 </div>
               </header>
@@ -387,6 +390,7 @@ function PersonModal({ report, line, onClose, onChanged }: { report: PayrollRepo
   const person = report.people.find((p) => p.id === line.userId)!;
   const [salary, setSalary] = useState<number | null>(person.monthlySalary);
   const [transport, setTransport] = useState(person.transportAllowance);
+  const [seguridad, setSeguridad] = useState(person.conPrestaciones !== false);
   const [draft, setDraft] = useState({ date: report.quincena.from, start: "", end: "", note: "" });
   const { run, busy } = useAction();
   const { confirm, dialog } = useConfirm();
@@ -412,11 +416,19 @@ function PersonModal({ report, line, onClose, onChanged }: { report: PayrollRepo
                 <input type="checkbox" checked={transport} onChange={(e) => setTransport(e.target.checked)} className="size-5 accent-[var(--color-glow)]" />
                 Recibe auxilio de transporte
               </label>
+              <label className="flex h-11 items-center gap-2 text-sm text-ink-soft">
+                <input type="checkbox" checked={seguridad} onChange={(e) => setSeguridad(e.target.checked)} className="size-5 accent-[var(--color-glow)]" />
+                SMI paga su seguridad social y prestaciones
+              </label>
               <Button
                 loading={busy === "pay"}
                 icon={<Save className="size-4" />}
                 onClick={async () => {
-                  const ok = await run("pay", () => api.payroll.setPay(line.userId, { monthlySalary: salary, transportAllowance: transport }), "Sueldo guardado");
+                  const ok = await run(
+                    "pay",
+                    () => api.payroll.setPay(line.userId, { monthlySalary: salary, transportAllowance: transport, seguridadSocial: seguridad }),
+                    "Sueldo guardado",
+                  );
                   if (ok) await onChanged();
                 }}
               >

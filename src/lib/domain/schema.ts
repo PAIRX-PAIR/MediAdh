@@ -48,6 +48,11 @@ export const userSchema = z.object({
   /** Receives the auxilio de transporte with each payment. */
   transportAllowance: z.boolean().default(false),
   /**
+   * SMI paga la seguridad social y las prestaciones de esta persona. Apagado para
+   * pensionados que ya tienen salud y pensión cubiertas (no suman prestaciones ni aportes).
+   */
+  seguridadSocialSmi: z.boolean().default(true),
+  /**
    * Admin accounts only. total = gerencia/administración (todo); gestion =
    * coordinación y asistencia (operación completa, sin configuración, equipo ni sueldos).
    */
