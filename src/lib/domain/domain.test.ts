@@ -195,6 +195,19 @@ describe("nómina quincenal", () => {
     expect(line!.net).toBe(line!.earned - line!.otherDeductions);
     expect(line!.earned + line!.employerCost).toBe(line!.earned + 402_696);
   });
+
+  it("un puesto indirecto sin prestaciones cobra su sueldo, sin horas automáticas ni aportes", () => {
+    const [line] = liquidate({
+      people: [{ id: "ind-1", displayName: "Contador", monthlySalary: 2_100_000, transportAllowance: false, conPrestaciones: false, sinHoras: true }],
+      entries: [],
+      quincena: quincenaOf("2026-10-13"),
+      calendar: smi,
+      settings,
+      now: { date: "2026-10-20", minutes: 600 },
+    });
+    expect(line).toMatchObject({ basic: 1_050_000, earned: 1_050_000, net: 1_050_000, workedHours: 0, aportes: 0, employerCost: 0 });
+    expect(line!.prestaciones.total).toBe(0);
+  });
 });
 
 describe("cotizador", () => {

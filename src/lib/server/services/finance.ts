@@ -15,7 +15,7 @@ import { payrollPeopleFor, workshopNow } from "./payroll";
 export async function financeReport(principal: Principal, monthParam: string | null) {
   const month = monthParam ?? principal.today.slice(0, 7);
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw badRequest("Mes inválido (AAAA-MM).");
-  const docs = await getDb().read(["orders", "attendance", "settings", "users", "positions", "payAdjustments"]);
+  const docs = await getDb().read(["orders", "attendance", "settings", "users", "positions", "payAdjustments", "indirectPositions"]);
   const tz = docs.settings.timezone;
 
   const delivered = docs.orders.items

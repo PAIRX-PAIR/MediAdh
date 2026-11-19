@@ -262,6 +262,25 @@ export const settingsPatchInput = z
   })
   .partial();
 
+/* ───────────── Puestos indirectos (nómina sin producción) ───────────── */
+
+export const indirectPositionInput = z.object({
+  title: requiredText(80),
+  personName: z.string().trim().max(120).default(""),
+  monthlySalary: z.number().min(0).max(100_000_000_000),
+  conPrestaciones: z.boolean().default(false),
+});
+
+export const indirectPositionPatchInput = z
+  .object({
+    title: requiredText(80),
+    personName: z.string().trim().max(120),
+    monthlySalary: z.number().min(0).max(100_000_000_000),
+    conPrestaciones: z.boolean(),
+  })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, "Nada que actualizar");
+
 /* ───────────── Registro de horas y nómina ───────────── */
 
 export const clockInput = z.object({ action: z.enum(["in", "out"]) });

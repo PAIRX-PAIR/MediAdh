@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ChevronLeft, ChevronRight, Download, Plus, Printer, Save, Settings2, Trash2, Wallet } from "lucide-react";
+import { AlertTriangle, Briefcase, ChevronLeft, ChevronRight, Download, Plus, Printer, Save, Settings2, Trash2, Wallet } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { KeyValues, MoneyInput, NumberInput, PageHeader, StatTile, TimeInput } from "@/components/ui/kit";
@@ -12,7 +12,7 @@ import { formatDate } from "@/lib/domain/labels";
 import { HOUR_KINDS, HOUR_KIND_LABEL, hourFactor, type PayrollLine } from "@/lib/domain/payroll";
 import { formatCop } from "@/lib/domain/quote";
 import { AdjustmentsEditor } from "@/components/production/pay-editor";
-import type { PayrollSettings } from "@/lib/domain/schema";
+import type { IndirectPosition, PayrollSettings } from "@/lib/domain/schema";
 
 const hrs = (n: number) => `${n.toLocaleString("es-CO", { maximumFractionDigits: 2 })} h`;
 const EXTRA_KINDS = HOUR_KINDS.filter((k) => k !== "holidayOrdinary");
@@ -37,6 +37,7 @@ export function PayrollScreen() {
   const [failed, setFailed] = useState<string | null>(null);
   const [personId, setPersonId] = useState<string | null>(null);
   const [config, setConfig] = useState(false);
+  const [indirectOpen, setIndirectOpen] = useState(false);
 
   const [version, setVersion] = useState(0);
   const load = async () => setVersion((v) => v + 1);
@@ -112,6 +113,11 @@ export function PayrollScreen() {
               >
                 <Download className="size-4" aria-hidden /> Excel
               </a>
+            )}
+            {money && (
+              <Button variant="secondary" icon={<Briefcase className="size-4" />} onClick={() => setIndirectOpen(true)}>
+                Puestos indirectos
+              </Button>
             )}
             {money && (
               <Button variant="secondary" icon={<Settings2 className="size-4" />} onClick={() => setConfig(true)}>
@@ -202,9 +208,15 @@ export function PayrollScreen() {
                       ]
                 }
               />
-              <Button className="mt-3" variant="secondary" size="sm" onClick={() => setPersonId(l.userId)}>
-                {money ? "Horas y sueldo" : "Registro de horas"}
-              </Button>
+              {l.userId.startsWith("ind-") ? (
+                <Button className="mt-3" variant="secondary" size="sm" onClick={() => setIndirectOpen(true)}>
+                  Editar puesto indirecto
+                </Button>
+              ) : (
+                <Button className="mt-3" variant="secondary" size="sm" onClick={() => setPersonId(l.userId)}>
+                  {money ? "Horas y sueldo" : "Registro de horas"}
+                </Button>
+              )}
             </Panel>
           ))}
         </div>
@@ -255,7 +267,119 @@ export function PayrollScreen() {
 
       {person && <PersonModal report={report} line={person} onClose={() => setPersonId(null)} onChanged={load} />}
       {config && <RulesModal settings={report.settings} onClose={() => setConfig(false)} onSaved={load} />}
+      {indirectOpen && <IndirectModal positions={report.indirect} onClose={() => setIndirectOpen(false)} onChanged={load} />}
     </div>
+  );
+}
+
+function IndirectModal({ positions, onClose, onChanged }: { positions: IndirectPosition[]; onClose: () => void; onChanged: () => Promise<void> }) {
+  const empty = { title: "", personName: "", monthlySalary: null as number | null, conPrestaciones: false };
+  const [draft, setDraft] = useState(empty);
+  const { run, busy } = useAction();
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Puestos indirectos"
+      description="Están en la nómina pero no en producción. Sin prestaciones = honorarios o por labor: no suman prestaciones ni aportes de SMI."
+      size="lg"
+    >
+      <div className="flex flex-col gap-4">
+        {positions.length === 0 ? (
+          <p className="text-sm text-muted">Todavía no hay puestos indirectos.</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {positions.map((p) => (
+              <IndirectRow key={p.id} position={p} onChanged={onChanged} />
+            ))}
+          </ul>
+        )}
+        <section aria-labelledby="nuevo-indirecto" className="rounded-xl border border-dashed border-line p-3">
+          <h3 id="nuevo-indirecto" className="mb-2 font-semibold text-ink">
+            Agregar puesto
+          </h3>
+          <div className="flex flex-wrap items-end gap-3">
+            <Field label="Puesto">
+              {(id) => <Input id={id} value={draft.title} maxLength={80} placeholder="Contador, aseo, mensajero…" onChange={(e) => setDraft({ ...draft, title: e.target.value })} />}
+            </Field>
+            <Field label="Nombre (opcional)">
+              {(id) => <Input id={id} value={draft.personName} maxLength={120} onChange={(e) => setDraft({ ...draft, personName: e.target.value })} />}
+            </Field>
+            <Field label="Sueldo mensual">{(id) => <MoneyInput id={id} value={draft.monthlySalary} onChange={(v) => setDraft({ ...draft, monthlySalary: v })} />}</Field>
+            <label className="flex h-11 items-center gap-2 text-sm text-ink-soft">
+              <input type="checkbox" checked={draft.conPrestaciones} onChange={(e) => setDraft({ ...draft, conPrestaciones: e.target.checked })} className="size-5 accent-[var(--color-glow)]" />
+              Con prestaciones
+            </label>
+            <Button
+              loading={busy === "add"}
+              disabled={!draft.title.trim() || draft.monthlySalary === null}
+              icon={<Plus className="size-4" />}
+              onClick={async () => {
+                const ok = await run(
+                  "add",
+                  () => api.payroll.addIndirect({ title: draft.title.trim(), personName: draft.personName.trim(), monthlySalary: draft.monthlySalary ?? 0, conPrestaciones: draft.conPrestaciones }),
+                  "Puesto agregado",
+                );
+                if (ok) {
+                  setDraft(empty);
+                  await onChanged();
+                }
+              }}
+            >
+              Agregar
+            </Button>
+          </div>
+        </section>
+      </div>
+    </Modal>
+  );
+}
+
+function IndirectRow({ position, onChanged }: { position: IndirectPosition; onChanged: () => Promise<void> }) {
+  const [title, setTitle] = useState(position.title);
+  const [personName, setPersonName] = useState(position.personName);
+  const [salary, setSalary] = useState<number | null>(position.monthlySalary);
+  const [prest, setPrest] = useState(position.conPrestaciones);
+  const { run, busy } = useAction();
+  const { confirm, dialog } = useConfirm();
+  const dirty = title !== position.title || personName !== position.personName || salary !== position.monthlySalary || prest !== position.conPrestaciones;
+  return (
+    <li className="flex flex-wrap items-end gap-2 rounded-xl border border-line p-3">
+      <Field label="Puesto">{(id) => <Input id={id} value={title} maxLength={80} onChange={(e) => setTitle(e.target.value)} />}</Field>
+      <Field label="Nombre">{(id) => <Input id={id} value={personName} maxLength={120} onChange={(e) => setPersonName(e.target.value)} />}</Field>
+      <Field label="Sueldo mensual">{(id) => <MoneyInput id={id} value={salary} onChange={setSalary} />}</Field>
+      <label className="flex h-11 items-center gap-2 text-sm text-ink-soft">
+        <input type="checkbox" checked={prest} onChange={(e) => setPrest(e.target.checked)} className="size-5 accent-[var(--color-glow)]" />
+        Con prestaciones
+      </label>
+      {dirty && (
+        <Button
+          size="sm"
+          loading={busy === "save"}
+          onClick={async () => {
+            const ok = await run(
+              "save",
+              () => api.payroll.updateIndirect(position.id, { title: title.trim(), personName: personName.trim(), monthlySalary: salary ?? 0, conPrestaciones: prest }),
+              "Puesto guardado",
+            );
+            if (ok) await onChanged();
+          }}
+        >
+          Guardar
+        </Button>
+      )}
+      <IconButton
+        label="Quitar puesto"
+        onClick={async () => {
+          if (!(await confirm({ title: `¿Quitar ${position.title}?`, body: "Deja de salir en la nómina de todas las quincenas.", confirmLabel: "Quitar", danger: true }))) return;
+          const ok = await run("rm", () => api.payroll.removeIndirect(position.id), "Puesto quitado");
+          if (ok) await onChanged();
+        }}
+      >
+        <Trash2 className="size-4" />
+      </IconButton>
+      {dialog}
+    </li>
   );
 }
 

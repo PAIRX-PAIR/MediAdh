@@ -314,6 +314,7 @@ export async function seedDemo(raw: RawStore) {
     attendance: collection(attendance, 0),
     devices: collection([], 0),
     payAdjustments: collection([], 0),
+    indirectPositions: collection([], 0),
     generalSupplies: collection([], 0),
   };
 

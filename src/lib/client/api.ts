@@ -15,6 +15,7 @@ import type {
   OrderStatus,
   PayrollSettings,
   Process,
+  IndirectPosition,
   ProductionSettings,
   Quote,
   RequestStatus,
@@ -56,6 +57,8 @@ export interface PayrollReport {
   current: string;
   settings: PayrollSettings;
   people: PayrollPersonView[];
+  /** Puestos indirectos (solo gerencia). */
+  indirect: IndirectPosition[];
   lines: PayrollLine[];
   entries: Array<Omit<Attendance, "history">>;
   /** AAAA-MM of the quincena, and hours of each person since the 1st of that month (up to now). */
@@ -538,5 +541,10 @@ export const api = {
     addAdjustment: (input: { userId: string; quincena: string; kind: "bono" | "descuento"; concept: string; amount: number }) =>
       request<{ adjustment: unknown }>("/api/admin/pagos/ajustes", { method: "POST", body: input }),
     removeAdjustment: (id: string) => request<{ ok: true }>(`/api/admin/pagos/ajustes/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    addIndirect: (input: { title: string; personName: string; monthlySalary: number; conPrestaciones: boolean }) =>
+      request<{ position: IndirectPosition }>("/api/admin/puestos-indirectos", { method: "POST", body: input }),
+    updateIndirect: (id: string, input: Partial<{ title: string; personName: string; monthlySalary: number; conPrestaciones: boolean }>) =>
+      request<{ position: IndirectPosition }>(`/api/admin/puestos-indirectos/${encodeURIComponent(id)}`, { method: "PATCH", body: input }),
+    removeIndirect: (id: string) => request<{ ok: true }>(`/api/admin/puestos-indirectos/${encodeURIComponent(id)}`, { method: "DELETE" }),
   },
 };
