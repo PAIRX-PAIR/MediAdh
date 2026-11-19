@@ -3,7 +3,7 @@ import { activeHolderId } from "@/lib/domain/contracts";
 import { minutesOf } from "@/lib/domain/calendar";
 import { diffFields } from "@/lib/domain/diff";
 import { liquidate, overlapsAnother, quincenaByKey, quincenaOf, shiftQuincena, type PayrollPerson, type Quincena } from "@/lib/domain/payroll";
-import type { Attendance, Database, User } from "@/lib/domain/schema";
+import type { Attendance, Database, IndirectPosition, User } from "@/lib/domain/schema";
 import { isRealDate, timeInZone, todayIn } from "@/lib/domain/time";
 import { isOwner, type Principal } from "../auth/principal";
 import { badRequest, notFound, forbidden } from "../http";
@@ -104,10 +104,21 @@ export interface PayrollPersonView extends PayrollPerson {
   positionTitle: string | null;
 }
 
-export function payrollPeopleFor(docs: Pick<Database, "users" | "positions">, entries: Attendance[], today: string): PayrollPersonView[] {
+export function payrollPeopleFor(docs: Pick<Database, "users" | "positions" | "indirectPositions">, entries: Attendance[], today: string): PayrollPersonView[] {
   const withEntries = new Set(entries.map((e) => e.userId));
   const positionOf = (u: User) => docs.positions.items.find((p) => activeHolderId(p, today) === u.id)?.title ?? null;
-  return docs.users.items
+  // Puestos indirectos: no están en producción ni registran horas; pagan sueldo fijo por quincena.
+  const indirect: PayrollPersonView[] = docs.indirectPositions.items.map((p) => ({
+    id: `ind-${p.id}`,
+    displayName: p.personName || p.title,
+    username: "",
+    monthlySalary: p.monthlySalary,
+    transportAllowance: false,
+    positionTitle: p.title,
+    conPrestaciones: p.conPrestaciones,
+    sinHoras: true,
+  }));
+  const staff = docs.users.items
     .filter((u) => u.status === "active" && (u.kind === "staff" || u.monthlySalary !== null || withEntries.has(u.id)))
     .map((u) => {
       // Paid by contract dates when the person has contracts (operarios, coordinación, asistencia).
@@ -119,24 +130,30 @@ export function payrollPeopleFor(docs: Pick<Database, "users" | "positions">, en
         username: u.username,
         monthlySalary: u.monthlySalary,
         transportAllowance: u.transportAllowance,
+        // Pensionados sin seguridad social de SMI: sin prestaciones ni aportes.
+        conPrestaciones: u.seguridadSocialSmi,
         positionTitle: positionOf(u),
         employment: employment.length ? employment : undefined,
       };
     })
     .sort((a, b) => a.displayName.localeCompare(b.displayName, "es"));
+  return [...staff, ...indirect.sort((a, b) => a.displayName.localeCompare(b.displayName, "es"))];
 }
 
 /** Liquidation of one quincena (key "AAAA-MM-1|2"; default: the current one). */
 export async function payrollReport(principal: Principal, key: string | null) {
   const quincena: Quincena | null = key ? quincenaByKey(key) : quincenaOf(principal.today);
   if (!quincena) throw badRequest("Quincena inválida (usa AAAA-MM-1 o AAAA-MM-2).");
-  const docs = await getDb().read(["attendance", "settings", "users", "positions", "payAdjustments"]);
+  const docs = await getDb().read(["attendance", "settings", "users", "positions", "payAdjustments", "indirectPositions"]);
   const entries = docs.attendance.items
     .filter((e) => e.date >= quincena.from && e.date <= quincena.to)
     .sort((a, b) => (a.date === b.date ? a.start.localeCompare(b.start) : a.date.localeCompare(b.date)));
   const owner = isOwner(principal);
   // Coordinación y asistencia keep the hours log; salaries and money stay with gerencia/administración.
-  const people = payrollPeopleFor(docs, entries, principal.today).map((p) => (owner ? p : { ...p, monthlySalary: null, transportAllowance: false }));
+  // Coordinación y asistencia no ven los puestos indirectos (no llevan horas).
+  const people = payrollPeopleFor(docs, entries, principal.today)
+    .filter((p) => owner || !p.id.startsWith("ind-"))
+    .map((p) => (owner ? p : { ...p, monthlySalary: null, transportAllowance: false }));
   const now = workshopNow(docs.settings);
   const calendar = calendarOf(docs.settings);
   // Hours since the 1st of the month (both quincenas, up to now).
@@ -154,6 +171,8 @@ export async function payrollReport(principal: Principal, key: string | null) {
   );
   return {
     moneyHidden: !owner,
+    /** Puestos indirectos (con sueldo): solo gerencia los ve y los edita. */
+    indirect: owner ? docs.indirectPositions.items : [],
     quincena,
     previous: shiftQuincena(quincena, -1).key,
     next: shiftQuincena(quincena, 1).key,
@@ -256,12 +275,17 @@ export async function deleteAttendance(principal: Principal, id: string) {
 }
 
 /** Salary and transport allowance of a person (admin only; the amount stays out of the audit log). */
-export async function setPay(principal: Principal, userId: string, input: { monthlySalary?: number | null; transportAllowance?: boolean }) {
+export async function setPay(
+  principal: Principal,
+  userId: string,
+  input: { monthlySalary?: number | null; transportAllowance?: boolean; seguridadSocial?: boolean },
+) {
   await getDb().transact(["users", "audit"], "Actualiza sueldo", ({ users, audit: log }) => {
     const user = users.items.find((u) => u.id === userId);
     if (!user) throw notFound();
     if (input.monthlySalary !== undefined) user.monthlySalary = input.monthlySalary;
     if (input.transportAllowance !== undefined) user.transportAllowance = input.transportAllowance;
+    if (input.seguridadSocial !== undefined) user.seguridadSocialSmi = input.seguridadSocial;
     user.updatedAt = nowIso();
     audit(log, actorOf(principal), "sueldo_actualizado", user.id, user.username);
   });
@@ -287,6 +311,51 @@ export async function addPayAdjustment(principal: Principal, input: PayAdjustmen
     // The amount stays out of the audit log (who and what, not how much).
     audit(log, actorOf(principal), input.kind === "bono" ? "bonificacion_registrada" : "descuento_registrado", user.id, `${user.username} · ${input.quincena} · ${input.concept}`);
     return entry;
+  });
+}
+
+export interface IndirectPositionInput {
+  title: string;
+  personName: string;
+  monthlySalary: number;
+  conPrestaciones: boolean;
+}
+
+/** Puestos indirectos: sueldo y forma de pago son de gerencia. */
+function requireOwnerForIndirect(principal: Principal) {
+  if (!isOwner(principal)) throw forbidden("Los puestos indirectos y sus sueldos son de gerencia.");
+}
+
+export async function addIndirectPosition(principal: Principal, input: IndirectPositionInput): Promise<IndirectPosition> {
+  requireOwnerForIndirect(principal);
+  const now = nowIso();
+  return getDb().transact(["indirectPositions", "audit"], "Crea puesto indirecto", ({ indirectPositions, audit: log }) => {
+    const entry: IndirectPosition = { id: newId(), ...input, createdBy: principal.user.id, createdAt: now, updatedAt: now };
+    indirectPositions.items.push(entry);
+    // El sueldo queda fuera del registro de auditoría (quién y qué, no cuánto).
+    audit(log, actorOf(principal), "puesto_indirecto_creado", entry.id, `${input.title}${input.personName ? ` · ${input.personName}` : ""}`);
+    return entry;
+  });
+}
+
+export async function updateIndirectPosition(principal: Principal, id: string, patch: Partial<IndirectPositionInput>): Promise<IndirectPosition> {
+  requireOwnerForIndirect(principal);
+  return getDb().transact(["indirectPositions", "audit"], "Edita puesto indirecto", ({ indirectPositions, audit: log }) => {
+    const entry = indirectPositions.items.find((p) => p.id === id);
+    if (!entry) throw notFound("El puesto indirecto no existe.");
+    Object.assign(entry, patch, { updatedAt: nowIso() });
+    audit(log, actorOf(principal), "puesto_indirecto_editado", entry.id, entry.title);
+    return entry;
+  });
+}
+
+export async function removeIndirectPosition(principal: Principal, id: string) {
+  requireOwnerForIndirect(principal);
+  await getDb().transact(["indirectPositions", "audit"], "Quita puesto indirecto", ({ indirectPositions, audit: log }) => {
+    const entry = indirectPositions.items.find((p) => p.id === id);
+    if (!entry) throw notFound("El puesto indirecto no existe.");
+    indirectPositions.items = indirectPositions.items.filter((p) => p.id !== id);
+    audit(log, actorOf(principal), "puesto_indirecto_quitado", entry.id, entry.title);
   });
 }
 

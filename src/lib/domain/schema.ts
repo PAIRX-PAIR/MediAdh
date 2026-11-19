@@ -48,6 +48,11 @@ export const userSchema = z.object({
   /** Receives the auxilio de transporte with each payment. */
   transportAllowance: z.boolean().default(false),
   /**
+   * SMI paga la seguridad social y las prestaciones de esta persona. Apagado para
+   * pensionados que ya tienen salud y pensión cubiertas (no suman prestaciones ni aportes).
+   */
+  seguridadSocialSmi: z.boolean().default(true),
+  /**
    * Admin accounts only. total = gerencia/administración (todo); gestion =
    * coordinación y asistencia (operación completa, sin configuración, equipo ni sueldos).
    */
@@ -759,6 +764,22 @@ export const payAdjustmentSchema = z.object({
 });
 export type PayAdjustment = z.infer<typeof payAdjustmentSchema>;
 
+/**
+ * Puesto indirecto: cargo que no está en producción (contador, aseo, mensajero…) pero sí en la nómina.
+ * Sin `conPrestaciones` se paga por honorarios o por labor: sin prestaciones ni aportes del empleador.
+ */
+export const indirectPositionSchema = z.object({
+  id,
+  title: z.string().min(1).max(80),
+  personName: z.string().max(120).default(""),
+  monthlySalary: z.number().min(0),
+  conPrestaciones: z.boolean().default(false),
+  createdBy: z.string(),
+  createdAt: isoDateTime,
+  updatedAt: isoDateTime,
+});
+export type IndirectPosition = z.infer<typeof indirectPositionSchema>;
+
 /** One clock-in/clock-out block of a person (registro de horas). */
 export const attendanceSchema = z.object({
   id,
@@ -871,6 +892,7 @@ export const COLLECTIONS = {
   attendance: collectionSchema(attendanceSchema),
   devices: collectionSchema(deviceSchema),
   payAdjustments: collectionSchema(payAdjustmentSchema),
+  indirectPositions: collectionSchema(indirectPositionSchema),
   /** Insumos por comprar que no están (todavía) enlazados a una orden. */
   generalSupplies: collectionSchema(requiredSupplySchema),
 } as const;
@@ -897,6 +919,7 @@ export interface Database {
   attendance: Collection<Attendance>;
   devices: Collection<Device>;
   payAdjustments: Collection<PayAdjustment>;
+  indirectPositions: Collection<IndirectPosition>;
   generalSupplies: Collection<RequiredSupply>;
 }
 
@@ -935,6 +958,7 @@ export const DOC_LAYOUT: Record<DocName, DocLayout> = {
   attendance: { kind: "sharded", dir: "asistencia" },
   devices: { kind: "single" },
   payAdjustments: { kind: "single" },
+  indirectPositions: { kind: "single" },
   generalSupplies: { kind: "single" },
 };
 

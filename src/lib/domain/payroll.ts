@@ -227,6 +227,10 @@ export interface PayrollPerson {
    * whole quincena (e.g. gerencia without a contract in the app).
    */
   employment?: Array<[string, string | null]>;
+  /** false = honorarios o por labor (puesto indirecto sin prestaciones): sin prestaciones ni aportes del empleador. */
+  conPrestaciones?: boolean;
+  /** Puesto indirecto: no registra horas, así que no suma horas automáticas del horario. */
+  sinHoras?: boolean;
 }
 
 /**
@@ -289,7 +293,7 @@ export function liquidate(input: {
   const dates = datesOf(quincena);
   return input.people.map((person) => {
     const recorded = input.entries.filter((e) => e.userId === person.id && e.date >= quincena.from && e.date <= quincena.to);
-    const mine = input.now && settings.autoAttendance ? [...recorded, ...autoEntries(person, dates, recorded, calendar, input.now)] : recorded;
+    const mine = input.now && settings.autoAttendance && !person.sinHoras ? [...recorded, ...autoEntries(person, dates, recorded, calendar, input.now)] : recorded;
     const days = dates.map((d) => dayHours(d, mine, calendar, settings));
     const salary = person.monthlySalary ?? 0;
     const hourlyValue = salary / settings.monthlyHours;
@@ -313,16 +317,17 @@ export function liquidate(input: {
     // Cesantías, intereses y prima se calculan sobre salario, horas extra y auxilio de transporte; vacaciones solo sobre el básico.
     const prestBase = basic + extrasTotal + transport;
     const pctOf = (amount: number, pct: number) => peso((amount * pct) / 100);
+    const withPrestaciones = person.conPrestaciones !== false;
     const prestaciones = {
-      cesantias: pctOf(prestBase, settings.cesantiasPct),
-      intereses: pctOf(prestBase, settings.interesesCesantiasPct),
-      prima: pctOf(prestBase, settings.primaPct),
-      vacaciones: pctOf(basic, settings.vacacionesPct),
+      cesantias: withPrestaciones ? pctOf(prestBase, settings.cesantiasPct) : 0,
+      intereses: withPrestaciones ? pctOf(prestBase, settings.interesesCesantiasPct) : 0,
+      prima: withPrestaciones ? pctOf(prestBase, settings.primaPct) : 0,
+      vacaciones: withPrestaciones ? pctOf(basic, settings.vacacionesPct) : 0,
       total: 0,
     };
     prestaciones.total = prestaciones.cesantias + prestaciones.intereses + prestaciones.prima + prestaciones.vacaciones;
     const parafiscales = settings.exoneracionParafiscales ? 0 : settings.saludEmpleadorPct + settings.senaPct + settings.icbfPct;
-    const aportes = pctOf(base, settings.pensionEmpleadorPct + settings.cajaPct + settings.arlPct + parafiscales);
+    const aportes = withPrestaciones ? pctOf(base, settings.pensionEmpleadorPct + settings.cajaPct + settings.arlPct + parafiscales) : 0;
     return {
       userId: person.id,
       name: person.displayName,

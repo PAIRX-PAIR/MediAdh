@@ -228,6 +228,7 @@ export async function createAccount(
       lastLoginAt: null,
       monthlySalary: null,
       transportAllowance: false,
+      seguridadSocialSmi: true,
       adminScope: input.kind === "admin" ? (input.adminScope ?? "total") : "total",
     };
     docs.users.items.push(user);

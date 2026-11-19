@@ -51,6 +51,7 @@ async function seedAdmin(id: string, scope: "total" | "gestion") {
       lastLoginAt: null,
       monthlySalary: null,
       transportAllowance: false,
+      seguridadSocialSmi: true,
       adminScope: scope,
     });
   });

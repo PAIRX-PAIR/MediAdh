@@ -59,6 +59,7 @@ async function seedUser(id: string, username: string) {
       lastLoginAt: null,
       monthlySalary: null,
       transportAllowance: false,
+      seguridadSocialSmi: true,
       adminScope: "total",
     });
   });

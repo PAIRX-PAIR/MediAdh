@@ -65,6 +65,7 @@ export async function seedDemo(raw: RawStore) {
     lastLoginAt: null,
     monthlySalary: null,
     transportAllowance: false,
+    seguridadSocialSmi: true,
     adminScope: "total",
     ...over,
   });
@@ -314,6 +315,7 @@ export async function seedDemo(raw: RawStore) {
     attendance: collection(attendance, 0),
     devices: collection([], 0),
     payAdjustments: collection([], 0),
+    indirectPositions: collection([], 0),
     generalSupplies: collection([], 0),
   };
 

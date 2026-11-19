@@ -65,6 +65,7 @@ async function setup() {
       lastLoginAt: null,
       monthlySalary: null,
       transportAllowance: false,
+      seguridadSocialSmi: true,
       adminScope: "total",
     });
   });
