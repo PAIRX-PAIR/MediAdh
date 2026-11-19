@@ -52,12 +52,11 @@ export async function financeReport(principal: Principal, monthParam: string | n
   const now = workshopNow(docs.settings);
   const lines1 = liquidate({ people, entries, quincena: q1, calendar, settings: docs.settings.payroll, adjustments, now });
   const lines2 = liquidate({ people, entries, quincena: q2, calendar, settings: docs.settings.payroll, adjustments, now });
-  const employerPct = docs.settings.finance.employerCostPct / 100;
   const payroll = people.map((p, i) => {
     const a = lines1[i]!;
     const b = lines2[i]!;
-    // Employer contributions and benefits apply to salary + overtime (not transport allowance or bonuses).
-    const employer = Math.round((a.basic + a.extrasTotal + b.basic + b.extrasTotal) * employerPct);
+    // Prestaciones sociales y aportes del empleador de las dos quincenas (ver liquidate en domain/payroll.ts).
+    const employer = a.employerCost + b.employerCost;
     return {
       userId: p.id,
       name: p.displayName,
@@ -75,6 +74,9 @@ export async function financeReport(principal: Principal, monthParam: string | n
   const payrollQ1 = payroll.reduce((s, p) => s + p.q1.earned, 0);
   const payrollQ2 = payroll.reduce((s, p) => s + p.q2.earned, 0);
   const employerCost = payroll.reduce((s, p) => s + p.employer, 0);
+  // Porcentaje efectivo sobre el devengado (lo que antes era un dato fijo del contador).
+  const devengado = payrollQ1 + payrollQ2;
+  const employerCostPct = devengado > 0 ? Math.round((employerCost / devengado) * 1000) / 10 : 0;
   const profit = sales - supplies - payrollQ1 - payrollQ2 - employerCost;
   const goals = docs.settings.finance;
   const basisValue = goals.goalBasis === "ventas" ? sales : profit;
@@ -91,7 +93,7 @@ export async function financeReport(principal: Principal, monthParam: string | n
     payrollQ1,
     payrollQ2,
     employerCost,
-    employerCostPct: docs.settings.finance.employerCostPct,
+    employerCostPct,
     profit,
     orders: delivered,
     withoutPrice,

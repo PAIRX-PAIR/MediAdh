@@ -3,7 +3,7 @@
 import { AlertTriangle, ChevronLeft, ChevronRight, Flag, Plus, Save, Target, Trash2, Trophy } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { MoneyInput, NumberInput, PageHeader, StatTile } from "@/components/ui/kit";
+import { MoneyInput, PageHeader, StatTile } from "@/components/ui/kit";
 import { Modal } from "@/components/ui/overlay";
 import { Button, Chip, EmptyState, Field, IconButton, Input, Panel, Select, Spinner, cn } from "@/components/ui/primitives";
 import { request } from "@/lib/client/api";
@@ -253,7 +253,6 @@ export function FinanceScreen() {
         <GoalsModal
           goals={report.goals.goals}
           basis={report.goals.goalBasis}
-          employerCostPct={report.goals.employerCostPct}
           onClose={() => setEditingGoals(false)}
           onSaved={() => setVersion((v) => v + 1)}
         />
@@ -334,19 +333,16 @@ function GoalsPanel({ report, onEdit }: { report: FinanceReport; onEdit: () => v
 function GoalsModal({
   goals,
   basis,
-  employerCostPct,
   onClose,
   onSaved,
 }: {
   goals: Goal[];
   basis: "ventas" | "ganancia";
-  employerCostPct: number;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [rows, setRows] = useState(goals);
   const [goalBasis, setGoalBasis] = useState(basis);
-  const [employer, setEmployer] = useState<number | null>(employerCostPct);
   const { run, busy } = useAction();
   return (
     <Modal
@@ -360,7 +356,7 @@ function GoalsModal({
           loading={busy === "g"}
           icon={<Save className="size-4" />}
           onClick={async () => {
-            const ok = await run("g", () => request("/api/admin/settings", { method: "PATCH", body: { finance: { goals: rows, goalBasis, employerCostPct: employer ?? 0 } } }), "Metas guardadas");
+            const ok = await run("g", () => request("/api/admin/settings", { method: "PATCH", body: { finance: { goals: rows, goalBasis } } }), "Metas guardadas");
             if (ok) {
               onSaved();
               onClose();
@@ -379,9 +375,6 @@ function GoalsModal({
               <option value="ganancia">Lo que queda después de insumos y nómina</option>
             </Select>
           )}
-        </Field>
-        <Field label="Carga prestacional" hint="% sobre sueldo y horas extra que la empresa paga además (dato de tu contador).">
-          {(id, d) => <NumberInput id={id} ariaDescribedBy={d} max={200} value={employer} onChange={setEmployer} suffix="%" />}
         </Field>
         {rows.map((g, i) => (
           <div key={i} className="flex flex-wrap items-center gap-2">

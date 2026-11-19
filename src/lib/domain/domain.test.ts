@@ -11,7 +11,7 @@ import { dayHours, liquidate, paidDaysIn, quincenaOf, shiftQuincena } from "./pa
 import { canCommit, machineHoursOn, nextUp, occupancy, planOrders, prioritize, type PlanContext } from "./planning";
 import { quoteDisplayStatus, quoteTotals } from "./quote";
 import { PART_BYTES, PDF_MAX_BYTES, partCount } from "./files";
-import type { Machine, Order, WorkItem } from "./schema";
+import { payrollSettingsSchema, type Machine, type Order, type WorkItem } from "./schema";
 import { zonedInstant } from "./time";
 
 const TZ = "America/Bogota";
@@ -67,7 +67,7 @@ describe("calendario laboral de Colombia", () => {
 
 describe("nómina quincenal", () => {
   const smi: WorkCalendar = { schedule: DEFAULT_WEEK_SCHEDULE, skipHolidays: true };
-  const settings = {
+  const settings = payrollSettingsSchema.parse({
     monthlyHours: 210,
     extraDayPct: 25,
     extraNightPct: 75,
@@ -79,7 +79,7 @@ describe("nómina quincenal", () => {
     pensionPct: 4,
     transportAllowance: 200_000,
     autoAttendance: true,
-  };
+  });
   let n = 0;
   const block = (date: string, start: string, end: string | null) => ({
     id: `a${++n}`,
@@ -178,6 +178,23 @@ describe("nómina quincenal", () => {
     });
     expect(line).toMatchObject({ hourlyValue: 10_000, basic: 1_050_000, extrasTotal: 18_750, transport: 100_000, health: 42_750, pension: 42_750, net: 1_083_250 });
     expect(line!.scheduledHours).toBe(85); // 1–15 oct 2026 con el festivo del lunes 12
+  });
+
+  it("provisiona prestaciones (cesantías, intereses, prima, vacaciones) y aportes del empleador por quincena", () => {
+    const people = [{ id: "u1", displayName: "Operario", monthlySalary: 2_100_000, transportAllowance: false }];
+    const args = { people, entries: [], quincena: quincenaOf("2026-10-13"), calendar: smi };
+    const [line] = liquidate({ ...args, settings });
+    // Básico de la quincena: 1.050.000. Cesantías 8,33 %, intereses 1 %, prima 8,33 %, vacaciones 4,17 % (solo básico).
+    expect(line!.prestaciones).toEqual({ cesantias: 87_465, intereses: 10_500, prima: 87_465, vacaciones: 43_785, total: 229_215 });
+    // Exonerado: pensión 12 %, caja 4 % y ARL 0,522 %.
+    expect(line!.aportes).toBe(173_481);
+    expect(line!.employerCost).toBe(402_696);
+    // Sin exoneración se suman salud 8,5 %, SENA 2 % e ICBF 3 %.
+    const [full] = liquidate({ ...args, settings: { ...settings, exoneracionParafiscales: false } });
+    expect(full!.aportes).toBe(315_231);
+    expect(full!.employerCost).toBe(544_446);
+    // El neto a pagar no cambia: las prestaciones son costo del taller, no descuento al trabajador.
+    expect(line!.net).toBe(line!.earned - line!.health - line!.pension);
   });
 });
 

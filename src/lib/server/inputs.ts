@@ -212,6 +212,8 @@ const productionSettingsPatch = z
   })
   .partial();
 
+const pct100 = z.number().min(0).max(100);
+
 const payrollSettingsPatch = z
   .object({
     monthlyHours: z.number().min(1).max(400),
@@ -225,6 +227,17 @@ const payrollSettingsPatch = z
     pensionPct: z.number().min(0).max(100),
     transportAllowance: money,
     autoAttendance: z.boolean(),
+    cesantiasPct: pct100,
+    interesesCesantiasPct: pct100,
+    primaPct: pct100,
+    vacacionesPct: pct100,
+    pensionEmpleadorPct: pct100,
+    cajaPct: pct100,
+    arlPct: pct100,
+    saludEmpleadorPct: pct100,
+    senaPct: pct100,
+    icbfPct: pct100,
+    exoneracionParafiscales: z.boolean(),
   })
   .partial();
 
@@ -232,7 +245,6 @@ const financeSettingsPatch = z
   .object({
     goals: z.array(z.object({ label: requiredText(40), amount: money, bonus: z.boolean().default(false) })).max(10),
     goalBasis: z.enum(["ventas", "ganancia"]),
-    employerCostPct: z.number().min(0).max(200),
   })
   .partial();
 

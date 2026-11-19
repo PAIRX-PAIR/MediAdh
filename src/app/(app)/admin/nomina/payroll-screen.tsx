@@ -51,6 +51,19 @@ export function PayrollScreen() {
       .catch((error) => setFailed(error instanceof Error ? error.message : "No se pudo cargar la nómina."));
   }, [key, version]);
 
+  // Las horas del horario suman solas: la pantalla vuelve a leer cada minuto y al volver a la pestaña.
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") setVersion((v) => v + 1);
+    };
+    const timer = window.setInterval(refresh, 60_000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
+
   const go = (q: string) => router.replace(`${pathname}?q=${q}`, { scroll: false });
 
   if (!report) {
@@ -111,7 +124,11 @@ export function PayrollScreen() {
         )}
         <StatTile label="Horas extra" value={hrs(report.lines.reduce((s, l) => s + extraHours(l), 0))} tone="pending" />
         {money ? (
-          <StatTile label="Valor extras" value={formatCop(report.lines.reduce((s, l) => s + l.extrasTotal, 0))} />
+          <StatTile
+            label="Costo con prestaciones"
+            value={formatCop(report.lines.reduce((s, l) => s + l.earned + l.employerCost, 0))}
+            hint="Devengado + prestaciones + aportes"
+          />
         ) : (
           <StatTile label="Sin salida" value={open} tone={open ? "pending" : "neutral"} />
         )}
@@ -286,6 +303,33 @@ function PersonModal({ report, line, onClose, onChanged }: { report: PayrollRepo
                 <span className="tabular text-glow">{formatCop(line.net)}</span>
               </li>
             </ul>
+            <h4 className="mb-2 mt-4 text-sm font-semibold text-ink">Lo que cuesta al taller</h4>
+            <ul className="flex flex-col gap-1 text-sm">
+              <li className="flex justify-between gap-3">
+                <span className="text-ink-soft">Cesantías ({report.settings.cesantiasPct} %)</span>
+                <span className="tabular text-ink">{formatCop(line.prestaciones.cesantias)}</span>
+              </li>
+              <li className="flex justify-between gap-3">
+                <span className="text-ink-soft">Intereses sobre cesantías ({report.settings.interesesCesantiasPct} %)</span>
+                <span className="tabular text-ink">{formatCop(line.prestaciones.intereses)}</span>
+              </li>
+              <li className="flex justify-between gap-3">
+                <span className="text-ink-soft">Prima ({report.settings.primaPct} %)</span>
+                <span className="tabular text-ink">{formatCop(line.prestaciones.prima)}</span>
+              </li>
+              <li className="flex justify-between gap-3">
+                <span className="text-ink-soft">Vacaciones ({report.settings.vacacionesPct} % del básico)</span>
+                <span className="tabular text-ink">{formatCop(line.prestaciones.vacaciones)}</span>
+              </li>
+              <li className="flex justify-between gap-3">
+                <span className="text-ink-soft">Aportes del empleador (pensión, caja, ARL{report.settings.exoneracionParafiscales ? "" : ", salud, SENA, ICBF"})</span>
+                <span className="tabular text-ink">{formatCop(line.aportes)}</span>
+              </li>
+              <li className="flex justify-between gap-3 border-t border-line pt-1 font-semibold">
+                <span className="text-ink">Costo total para el taller</span>
+                <span className="tabular text-glow">{formatCop(line.earned + line.employerCost)}</span>
+              </li>
+            </ul>
             <h4 className="mb-2 mt-4 text-sm font-semibold text-ink">Bonificaciones y descuentos de esta quincena</h4>
             <AdjustmentsEditor userId={line.userId} report={report} onChanged={onChanged} />
           </section>
@@ -432,7 +476,8 @@ function RulesModal({ settings, onClose, onSaved }: { settings: PayrollSettings;
   const [form, setForm] = useState(settings);
   const { run, busy } = useAction();
   const set = <K extends keyof PayrollSettings>(k: K, v: PayrollSettings[K]) => setForm((f) => ({ ...f, [k]: v }));
-  const pct = (k: "extraDayPct" | "extraNightPct" | "sundayHolidayPct" | "healthPct" | "pensionPct", label: string, hint?: string) => (
+  type PctKey = { [K in keyof PayrollSettings]: PayrollSettings[K] extends number ? K : never }[keyof PayrollSettings];
+  const pct = (k: PctKey, label: string, hint?: string) => (
     <Field label={label} hint={hint}>
       {(id, d) => <NumberInput id={id} ariaDescribedBy={d} max={300} value={form[k]} onChange={(v) => set(k, v ?? 0)} suffix="%" />}
     </Field>
@@ -486,6 +531,29 @@ function RulesModal({ settings, onClose, onSaved }: { settings: PayrollSettings;
         <Field label="Fin de la jornada nocturna">{(id) => <Input id={id} type="time" value={form.nightEnd} onChange={(e) => set("nightEnd", e.target.value)} />}</Field>
         {pct("healthPct", "Descuento salud (trabajador)", "Ley: 4 %")}
         {pct("pensionPct", "Descuento pensión (trabajador)", "Ley: 4 %")}
+        <h3 className="font-semibold text-ink sm:col-span-2">Prestaciones sociales (se provisionan cada quincena)</h3>
+        {pct("cesantiasPct", "Cesantías", "Ley: 8,33 % del salario, horas extra y auxilio")}
+        {pct("interesesCesantiasPct", "Intereses sobre cesantías", "Ley: 12 % anual de cesantías = 1 % mensual")}
+        {pct("primaPct", "Prima de servicios", "Ley: 8,33 % del salario, horas extra y auxilio")}
+        {pct("vacacionesPct", "Vacaciones", "Ley: 4,17 % solo del básico")}
+        <h3 className="font-semibold text-ink sm:col-span-2">Aportes del empleador</h3>
+        {pct("pensionEmpleadorPct", "Pensión del empleador", "Ley: 12 %")}
+        {pct("cajaPct", "Caja de compensación", "Ley: 4 %")}
+        {pct("arlPct", "ARL", "Riesgo I (taller): 0,522 %")}
+        <label className="flex items-start gap-2 text-sm text-ink-soft sm:col-span-2">
+          <input type="checkbox" checked={form.exoneracionParafiscales} onChange={(e) => set("exoneracionParafiscales", e.target.checked)} className="mt-0.5 size-5 accent-[var(--color-glow)]" />
+          <span>
+            <span className="font-semibold text-ink">Exonerados de salud, SENA e ICBF</span>
+            <span className="block text-xs text-muted">Aplica si el sueldo es menor a 10 SMMLV (art. 114-1 ET). Si está apagado, el empleador paga también salud, SENA e ICBF.</span>
+          </span>
+        </label>
+        {!form.exoneracionParafiscales && (
+          <>
+            {pct("saludEmpleadorPct", "Salud del empleador", "Ley: 8,5 %")}
+            {pct("senaPct", "SENA", "Ley: 2 %")}
+            {pct("icbfPct", "ICBF", "Ley: 3 %")}
+          </>
+        )}
       </div>
     </Modal>
   );
