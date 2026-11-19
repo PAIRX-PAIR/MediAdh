@@ -261,6 +261,12 @@ export interface PayrollLine {
   health: number;
   pension: number;
   net: number;
+  /** Prestaciones sociales de la quincena (provisión: se pagan en otra fecha, pero cuestan hoy). */
+  prestaciones: { cesantias: number; intereses: number; prima: number; vacaciones: number; total: number };
+  /** Aportes del empleador a pensión, caja, ARL (y salud, SENA e ICBF si no aplica la exoneración). */
+  aportes: number;
+  /** Carga que suma la empresa encima del devengado: prestaciones + aportes del empleador. */
+  employerCost: number;
   workedHours: number;
   scheduledHours: number;
   openEntries: number;
@@ -306,6 +312,19 @@ export function liquidate(input: {
     const bonuses = adjustments.filter((a) => a.kind === "bono").reduce((s, a) => s + a.amount, 0);
     const otherDeductions = adjustments.filter((a) => a.kind === "descuento").reduce((s, a) => s + a.amount, 0);
     const earned = base + transport + bonuses;
+    // Cesantías, intereses y prima se calculan sobre salario, horas extra y auxilio de transporte; vacaciones solo sobre el básico.
+    const prestBase = basic + extrasTotal + transport;
+    const pctOf = (amount: number, pct: number) => peso((amount * pct) / 100);
+    const prestaciones = {
+      cesantias: pctOf(prestBase, settings.cesantiasPct),
+      intereses: pctOf(prestBase, settings.interesesCesantiasPct),
+      prima: pctOf(prestBase, settings.primaPct),
+      vacaciones: pctOf(basic, settings.vacacionesPct),
+      total: 0,
+    };
+    prestaciones.total = prestaciones.cesantias + prestaciones.intereses + prestaciones.prima + prestaciones.vacaciones;
+    const parafiscales = settings.exoneracionParafiscales ? 0 : settings.saludEmpleadorPct + settings.senaPct + settings.icbfPct;
+    const aportes = pctOf(base, settings.pensionEmpleadorPct + settings.cajaPct + settings.arlPct + parafiscales);
     return {
       userId: person.id,
       name: person.displayName,
@@ -324,6 +343,9 @@ export function liquidate(input: {
       health,
       pension,
       net: earned - health - pension - otherDeductions,
+      prestaciones,
+      aportes,
+      employerCost: prestaciones.total + aportes,
       workedHours: days.reduce((sum, d) => sum + d.workedMinutes, 0) / 60,
       scheduledHours: days.reduce((sum, d) => sum + d.scheduledMinutes, 0) / 60,
       openEntries: days.reduce((sum, d) => sum + d.openEntries, 0),

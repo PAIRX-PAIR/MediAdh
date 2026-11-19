@@ -585,7 +585,9 @@ describe("ganancias del mes", () => {
     // Sin horas extra: 1.050.000 por quincena menos salud y pensión (8 %).
     expect(tornero.q1).toMatchObject({ earned: 1_050_000, net: 966_000 });
     expect(tornero.net).toBe(1_932_000);
-    expect(report.profit).toBe(2_000_000 - 300_000 - report.payrollQ1 - report.payrollQ2);
+    // Prestaciones y aportes del empleador: cesantías, intereses, prima, vacaciones, pensión, caja y ARL (sin salud, SENA ni ICBF por exoneración).
+    expect(tornero.employer).toBeGreaterThan(0);
+    expect(report.profit).toBe(2_000_000 - 300_000 - report.payrollQ1 - report.payrollQ2 - report.employerCost);
     expect(report.goals.progress.next?.label).toBe("Meta 1");
     await expect(finance.financeReport(admin, "2026-13")).rejects.toMatchObject({ status: 400 });
   });

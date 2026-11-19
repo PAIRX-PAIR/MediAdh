@@ -703,6 +703,21 @@ export const payrollSettingsSchema = z.object({
   transportAllowance: z.number().min(0).default(0),
   /** Each workday adds the schedule hours by itself (no clock-in needed); records and faltas replace it. */
   autoAttendance: z.boolean().default(true),
+  /** Prestaciones sociales: provisión sobre el salario de cada quincena (ley colombiana). */
+  cesantiasPct: z.number().min(0).max(100).default(8.33),
+  /** Intereses sobre cesantías: 12 % anual de las cesantías = 1 % mensual del salario. */
+  interesesCesantiasPct: z.number().min(0).max(100).default(1),
+  primaPct: z.number().min(0).max(100).default(8.33),
+  vacacionesPct: z.number().min(0).max(100).default(4.17),
+  /** Aportes del empleador: pensión, caja de compensación y ARL. */
+  pensionEmpleadorPct: z.number().min(0).max(100).default(12),
+  cajaPct: z.number().min(0).max(100).default(4),
+  arlPct: z.number().min(0).max(100).default(0.522),
+  /** Salud, SENA e ICBF del empleador: no se pagan si aplica la exoneración (art. 114-1 ET: sueldo menor a 10 SMMLV). */
+  saludEmpleadorPct: z.number().min(0).max(100).default(8.5),
+  senaPct: z.number().min(0).max(100).default(2),
+  icbfPct: z.number().min(0).max(100).default(3),
+  exoneracionParafiscales: z.boolean().default(true),
 });
 export type PayrollSettings = z.infer<typeof payrollSettingsSchema>;
 
